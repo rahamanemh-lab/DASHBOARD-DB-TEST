@@ -4831,4 +4831,5 @@ def main():
 
 
 if __name__ == "__main__":
+    render_crypto_test_section()
     main()
