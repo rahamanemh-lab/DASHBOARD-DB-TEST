@@ -14,7 +14,12 @@ pydeck==0.8.1b0
 
 #SQL
 SQLAlchemy>=2.0
-PyMySQL
+
+pymysql==1.1.0
+cryptography==41.0.7
+boto3==1.34.0
+
+
 
 # Core Python packages
 requests==2.31.0
