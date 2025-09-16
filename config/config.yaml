@@ -1,0 +1,380 @@
+# Configuration principale - Dashboard Souscriptions
+# Version: 1.0.0
+
+# =============================================================================
+# Configuration de l'application
+# =============================================================================
+app:
+  name: "Dashboard Souscriptions"
+  version: "1.0.0"
+  description: "Tableau de bord pour l'analyse des souscriptions et données immobilières"
+  author: "Votre Nom"
+  contact: "votre-email@example.com"
+  
+  # Configuration Streamlit
+  streamlit:
+    title: "📊 Dashboard Souscriptions"
+    page_icon: "📈"
+    layout: "wide"
+    initial_sidebar_state: "expanded"
+    menu_items:
+      'Get Help': 'mailto:votre-email@example.com'
+      'Report a bug': 'https://gitlab.com/datanaly-group/dashboard-souscriptions/-/issues'
+      'About': "Application de suivi et d'analyse des souscriptions v1.0.0"
+
+# =============================================================================
+# Configuration serveur
+# =============================================================================
+server:
+  host: "0.0.0.0"
+  port: 8501
+  debug: false
+  
+  # Configuration SSL/HTTPS
+  ssl:
+    enabled: true
+    cert_file: "/etc/letsencrypt/live/dashboard.votredomaine.com/fullchain.pem"
+    key_file: "/etc/letsencrypt/live/dashboard.votredomaine.com/privkey.pem"
+  
+  # Domaines autorisés
+  allowed_hosts:
+    - "dashboard.votredomaine.com"
+    - "www.dashboard.votredomaine.com"
+    - "localhost"
+    - "127.0.0.1"
+
+# =============================================================================
+# Configuration base de données
+# =============================================================================
+database:
+  # Base de données principale
+  primary:
+    type: "postgresql"  # ou "mysql", "sqlite"
+    host: "localhost"
+    port: 5432
+    name: "dashboard_souscriptions"
+    user: "dashboard_user"
+    password: "${DB_PASSWORD}"  # Variable d'environnement
+    pool_size: 5
+    max_overflow: 10
+    echo: false
+  
+  # Base de données de cache (Redis)
+  cache:
+    type: "redis"
+    host: "localhost"
+    port: 6379
+    db: 0
+    password: "${REDIS_PASSWORD}"
+    timeout: 30
+    enabled: false  # Désactivé par défaut
+
+# =============================================================================
+# Configuration des données
+# =============================================================================
+data:
+  # Répertoires de données
+  directories:
+    input: "./data/input"
+    output: "./data/output"
+    temp: "./data/temp"
+    backup: "./data/backup"
+    logs: "./logs"
+  
+  # Formats de fichiers supportés
+  formats:
+    upload: ["csv", "xlsx", "xls", "json"]
+    export: ["csv", "xlsx", "pdf", "json"]
+    max_file_size: "2000MB"
+  
+  # Configuration des données par défaut
+  sample_data:
+    enabled: true
+    rows: 1000
+    start_date: "2023-01-01"
+    end_date: "2024-12-31"
+
+# =============================================================================
+# Configuration des analyses
+# =============================================================================
+analyses:
+  # Module épargne
+  epargne:
+    enabled: true
+    default_period: "12m"  # 12 mois
+    metrics:
+      - "montant_total"
+      - "nombre_contrats"
+      - "taux_croissance"
+      - "performance"
+    visualizations:
+      - "timeline"
+      - "distribution"
+      - "comparaison"
+  
+  # Module immobilier
+  immobilier:
+    enabled: true
+    zones:
+      - "Paris"
+      - "Lyon"
+      - "Marseille"
+      - "Bordeaux"
+      - "Lille"
+    metrics:
+      - "prix_m2"
+      - "rendement"
+      - "evolution"
+      - "volume_transactions"
+  
+  # Module entretiens
+  entretiens:
+    enabled: true
+    types:
+      - "commercial"
+      - "suivi"
+      - "prospection"
+      - "reclamation"
+    statuts:
+      - "planifie"
+      - "realise"
+      - "annule"
+      - "reporte"
+  
+  # Module conseillers
+  conseillers:
+    enabled: true
+    kpis:
+      - "ca_mensuel"
+      - "nb_clients"
+      - "taux_conversion"
+      - "satisfaction_client"
+    objectifs:
+      ca_mensuel: 50000
+      nb_nouveaux_clients: 10
+      taux_conversion: 0.15
+
+# =============================================================================
+# Configuration UI/UX
+# =============================================================================
+ui:
+  # Thème et couleurs
+  theme:
+    primary_color: "#13c2c3"
+    background_color: "#13c2c2"
+    secondary_background_color: "#13c2c2"
+    text_color: "#13c2c2"
+    accent_color: "#ff6b6b"
+    success_color: "#51cf66"
+    warning_color: "#ffd43b"
+    error_color: "#ff6b6b"
+
+  # Configuration du footer
+  footer:
+    enabled: false
+  
+  # Configuration des graphiques
+  charts:
+    default_height: 400
+    color_palette:
+      - "#1f77b4"
+      - "#ff7f0e"
+      - "#2ca02c"
+      - "#d62728"
+      - "#9467bd"
+      - "#8c564b"
+      - "#e377c2"
+      - "#7f7f7f"
+      - "#bcbd22"
+      - "#17becf"
+    
+    # Configuration Plotly
+    plotly:
+      config:
+        displayModeBar: true
+        displaylogo: false
+        modeBarButtonsToRemove:
+          - "select2d"
+          - "lasso2d"
+          - "autoScale2d"
+          - "resetScale2d"
+  
+  # Pagination et performance
+  pagination:
+    page_size: 50
+    max_rows_display: 1000
+  
+  # Cache de l'interface
+  cache:
+    ttl: 300  # 5 minutes
+    max_entries: 100
+
+# =============================================================================
+# Configuration sécurité
+# =============================================================================
+security:
+  # Authentification (si nécessaire)
+  auth:
+    enabled: false  # Désactivé par défaut
+    provider: "local"  # "local", "oauth", "ldap"
+    session_timeout: 3600  # 1 heure
+    
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst: 10
+  
+  # CORS
+  cors:
+    enabled: true
+    origins:
+      - "https://dashboard.votredomaine.com"
+      - "https://www.dashboard.votredomaine.com"
+    methods: ["GET", "POST", "PUT", "DELETE"]
+    headers: ["Content-Type", "Authorization"]
+  
+  # Headers de sécurité
+  headers:
+    x_frame_options: "DENY"
+    x_content_type_options: "nosniff"
+    x_xss_protection: "1; mode=block"
+    strict_transport_security: "max-age=31536000; includeSubDomains"
+
+# =============================================================================
+# Configuration logging
+# =============================================================================
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Fichiers de logs
+  files:
+    app: "./logs/app.log"
+    error: "./logs/error.log"
+    access: "./logs/access.log"
+    security: "./logs/security.log"
+  
+  # Rotation des logs
+  rotation:
+    max_size: "10MB"
+    backup_count: 5
+    interval: "midnight"
+  
+  # Logs par module
+  modules:
+    analyses: "INFO"
+    utils: "INFO"
+    database: "WARNING"
+    auth: "INFO"
+
+# =============================================================================
+# Configuration monitoring
+# =============================================================================
+monitoring:
+  # Métriques système
+  system:
+    cpu_threshold: 80  # %
+    memory_threshold: 85  # %
+    disk_threshold: 90  # %
+    
+  # Health checks
+  health:
+    enabled: true
+    endpoint: "/health"
+    interval: 30  # secondes
+    timeout: 10  # secondes
+  
+  # Alertes
+  alerts:
+    email:
+      enabled: false
+      smtp_server: "smtp.gmail.com"
+      smtp_port: 587
+      username: "${EMAIL_USER}"
+      password: "${EMAIL_PASSWORD}"
+      recipients:
+        - "admin@votredomaine.com"
+    
+    webhook:
+      enabled: false
+      url: "${WEBHOOK_URL}"
+      timeout: 30
+
+# =============================================================================
+# Configuration environnements
+# =============================================================================
+environments:
+  development:
+    debug: true
+    log_level: "DEBUG"
+    cache_ttl: 60
+    sample_data: true
+    
+  staging:
+    debug: false
+    log_level: "INFO"
+    cache_ttl: 300
+    sample_data: true
+    
+  production:
+    debug: false
+    log_level: "WARNING"
+    cache_ttl: 600
+    sample_data: false
+    monitoring_enabled: true
+
+# =============================================================================
+# Configuration features flags
+# =============================================================================
+features:
+  # Nouvelles fonctionnalités
+  beta_features:
+    enabled: false
+    ai_insights: false
+    advanced_analytics: false
+    real_time_updates: false
+  
+  # Fonctionnalités expérimentales
+  experimental:
+    enabled: false
+    machine_learning: false
+    predictive_analytics: false
+    automated_reports: false
+
+# =============================================================================
+# Configuration API (si nécessaire)
+# =============================================================================
+api:
+  # API REST
+  rest:
+    enabled: false
+    prefix: "/api/v1"
+    rate_limit: 100  # requêtes par minute
+    
+  # Documentation API
+  docs:
+    enabled: false
+    title: "Dashboard Souscriptions API"
+    version: "1.0.0"
+    description: "API pour le dashboard de souscriptions"
+
+# =============================================================================
+# Configuration déploiement
+# =============================================================================
+deployment:
+  environment: "production"  # development, staging, production
+  domain: "dashboard.votredomaine.com"
+  cdn_enabled: false
+  
+  # Configuration Docker
+  docker:
+    image: "dashboard-souscriptions"
+    tag: "latest"
+    port: 8501
+    
+  # Configuration CI/CD
+  cicd:
+    auto_deploy: true
+    run_tests: true
+    backup_before_deploy: true

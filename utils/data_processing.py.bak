@@ -1,0 +1,534 @@
+"""
+Fonctions de traitement des données pour le dashboard de souscriptions.
+"""
+import pandas as pd
+import streamlit as st
+import numpy as np
+import re
+from datetime import datetime
+
+
+@st.cache_data
+def safe_to_numeric(series):
+    """Convertit une série en numérique avec gestion des erreurs et diagnostic."""
+    if series.empty:
+        return series
+        
+    # Créer une copie pour éviter de modifier l'original
+    result = pd.Series([np.nan] * len(series), index=series.index)
+    
+    # Ignorer les valeurs nulles
+    mask_notna = series.notna()
+    if not mask_notna.any():
+        return result
+    
+    # Convertir en chaîne et nettoyer
+    series_str = series[mask_notna].astype(str)
+    
+    # Nettoyage avancé des valeurs numériques
+    # Détection et traitement des formats numériques internationaux
+    
+    # Afficher les valeurs avant conversion pour diagnostic
+    sample_values = series_str.sample(min(5, len(series_str))).tolist()
+    st.info(f"Exemples de montants avant conversion: {sample_values}")
+    
+    # Traitement des montants avec séparateurs de milliers et décimaux
+    # Détection du format des montants (anglais ou français)
+    # Format anglais: 1,234,567.89 (virgule = séparateur de milliers, point = décimal)
+    # Format français: 1 234 567,89 ou 1.234.567,89 (espace/point = séparateur de milliers, virgule = décimal)
+    
+    # Vérifier si le format semble être anglais (point comme séparateur décimal)
+    format_anglais = series_str.str.contains(r'\d+\.\d+').any()
+    
+    if format_anglais:
+        st.success("Format anglais détecté (ex: 1,234,567.89) - Traitement adapté")
+        # Supprimer uniquement les virgules (séparateurs de milliers en format anglais)
+        series_str = series_str.str.replace(',', '', regex=False)
+    else:
+        st.success("Format français détecté (ex: 1 234 567,89) - Traitement adapté")
+        # Supprimer les espaces et points (séparateurs de milliers en format français)
+        series_str = series_str.str.replace(' ', '', regex=False)
+        series_str = series_str.str.replace('\.', '', regex=True)
+        # Remplacer les virgules par des points (séparateur décimal en format français)
+        series_str = series_str.str.replace(',', '.', regex=False)
+    
+    # 2. Supprimer les espaces, symboles monétaires et autres caractères non numériques
+    series_str = series_str.str.replace(r'[\s€$£¥\u20AC]', '', regex=True)
+    
+    # 3. Gérer les formats avec points comme séparateurs de milliers (1.000.000 -> 1000000)
+    # Mais seulement si ce ne sont pas des séparateurs décimaux
+    # On remplace les points qui sont suivis de 3 chiffres
+    series_str = series_str.str.replace(r'(\d+)\.(\d{3}(?!\.\d+))', r'\1\2', regex=True)
+    series_str = series_str.str.replace(r'(\d+)\.(\d{3}\.)', r'\1\2', regex=True)
+    
+    # Afficher les valeurs après nettoyage pour diagnostic
+    st.info(f"Montants après nettoyage: {series_str.sample(min(5, len(series_str))).tolist()}")
+
+    
+    try:
+        # Convertir en numérique
+        numeric_values = pd.to_numeric(series_str, errors='coerce')
+        result[mask_notna] = numeric_values
+        
+        # Diagnostics
+        zero_count = (result == 0).sum()
+        nan_count = result.isna().sum()
+        total = len(result)
+        
+        if nan_count > 0:
+            st.info(f"ℹ️ {nan_count} valeurs n'ont pas pu être converties en nombres sur {total} ({nan_count/total:.1%}).")
+            
+            # Afficher quelques exemples de valeurs problématiques
+            if nan_count > 0:
+                problem_values = series[result.isna()].sample(min(5, nan_count)).tolist()
+                st.info(f"Exemples de valeurs non converties: {problem_values}")
+        
+        if zero_count > 0:
+            st.info(f"ℹ️ {zero_count} valeurs sont égales à zéro sur {total} ({zero_count/total:.1%}).")
+        
+        # Remplacer les NaN par 0 uniquement si demandé (par défaut oui)
+        return result.fillna(0)
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la conversion numérique: {str(e)}")
+        return pd.Series([0] * len(series), index=series.index)
+
+
+@st.cache_data
+def safe_to_datetime(series):
+    """Convertit une série en datetime avec gestion des erreurs et formats multiples."""
+    if series.empty:
+        return series
+    
+    # Créer une copie pour éviter de modifier l'original
+    result = pd.Series([pd.NaT] * len(series), index=series.index)
+    
+    # Ignorer les valeurs nulles
+    mask_notna = series.notna()
+    if not mask_notna.any():
+        return result
+    
+    # Convertir les valeurs en chaînes de caractères pour uniformiser le traitement
+    series_str = series[mask_notna].astype(str)
+    
+    # Nettoyer les chaînes (supprimer les espaces supplémentaires, etc.)
+    series_str = series_str.str.strip()
+    
+    # Créer un dictionnaire pour stocker les raisons des échecs de conversion
+    conversion_issues = {}
+    
+    # Pré-traitement: nettoyer les chaînes pour les cas spéciaux
+    # 1. Insérer un espace entre le texte et les chiffres pour les dates collées au texte
+    series_str = series_str.str.replace(r'([A-Za-z])([0-3]?\d[/.-])', r'\1 \2', regex=True)
+    
+    # Identifier et ignorer les chaînes qui ne sont clairement pas des dates
+    # (par exemple, les chaînes contenant des informations de souscription)
+    mask_potential_dates = ~series_str.str.contains(r'\d{5,}|\\u20ac|\$|\%|\#')
+    non_date_format = mask_notna & ~mask_potential_dates
+    if non_date_format.any():
+        conversion_issues['format_non_date'] = series_str[non_date_format].tolist()
+    
+    # Identifier les valeurs qui semblent être des nombres (dates Excel)
+    mask_numeric = series_str.str.match(r'^\d+(\.\d+)?$')
+    if mask_numeric.any():
+        try:
+            # Convertir les dates au format Excel
+            excel_epoch = pd.Timestamp('1899-12-30')
+            numeric_values = pd.to_numeric(series_str[mask_numeric], errors='coerce')
+            temp_dates = excel_epoch + pd.to_timedelta(numeric_values, unit='D')
+            
+            # Ne pas filtrer par année pour accepter toutes les dates valides
+            valid_year_mask = temp_dates.notna()
+            if valid_year_mask.any():
+                result[mask_notna][mask_numeric][valid_year_mask] = temp_dates[valid_year_mask]
+            
+            # Enregistrer les dates Excel qui ne sont pas de 2025
+            invalid_excel_dates = mask_numeric & ~valid_year_mask
+            if invalid_excel_dates.any():
+                conversion_issues['excel_dates_non_2025'] = series_str[invalid_excel_dates].tolist()
+        except Exception as e:
+            conversion_issues['excel_date_error'] = str(e)
+    
+    # Traiter les formats de date courants
+    formats_to_try = [
+        # Format spécifique de l'utilisateur (jj/mm/aaaa) - PRIORITAIRE ABSOLU
+        '%d/%m/%Y',
+        
+        # Autres formats européens (jour/mois/année) - HAUTE PRIORITÉ
+        '%d-%m-%Y', '%d.%m.%Y', 
+        
+        # Formats courts européens
+        '%d/%m/%y', '%d-%m-%y', '%d.%m.%y',
+        
+        # Formats avec heure (format européen)
+        '%d-%m-%Y %H:%M:%S', '%d-%m-%Y %H:%M',
+        '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', 
+        
+        # Formats textuels (format européen)
+        '%d %B %Y', '%d %b %Y',
+        
+        # Formats avec jour de la semaine (format européen)
+        '%a %d/%m/%Y', '%A %d/%m/%Y', '%a %d %b %Y', '%A %d %B %Y',
+        
+        # Format ISO - PRIORITÉ MOYENNE
+        '%Y-%m-%d', '%Y/%m/%d', '%Y.%m.%d',
+        '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M',
+        
+        # Format américain (mois/jour/année) - DERNIER RECOURS
+        '%m/%d/%Y', '%m-%d-%Y', '%m.%d.%Y', '%m/%d/%y', '%m-%d-%y', '%m.%d.%y',
+        '%B %d, %Y', '%b %d, %Y'
+    ]
+    
+    # Afficher un message d'information sur le format de date attendu
+    st.info("""
+    ℹ️ **Format de date attendu**: jj/mm/aaaa (exemple: 15/07/2025)
+    
+    Autres formats acceptés (par ordre de priorité):
+    - jj/mm/aaaa (15/07/2025)
+    - jj.mm.aaaa (15.07.2025)
+    - Formats avec heure: jj/mm/aaaa HH:MM:SS
+    """)
+    
+    # Essayer les formats un par un
+    remaining_mask = mask_notna & result.isna() & mask_potential_dates
+    format_success_count = {}
+    
+    # Essayer d'abord pandas auto-detection (très robuste pour les dates)
+    if remaining_mask.any():
+        try:
+            # Utiliser pandas pour détecter automatiquement le format
+            temp_result = pd.to_datetime(series_str[remaining_mask], errors='coerce')
+            valid_mask = temp_result.notna()
+            if valid_mask.any():
+                result[remaining_mask.index[valid_mask]] = temp_result[valid_mask]
+                format_success_count['auto_detect'] = valid_mask.sum()
+                # Mettre à jour le masque pour les valeurs restantes
+                remaining_mask = mask_notna & result.isna() & mask_potential_dates
+        except Exception as e:
+            conversion_issues['auto_detect_error'] = str(e)
+    
+    # Ensuite essayer les formats spécifiques un par un
+    if remaining_mask.any():
+        for date_format in formats_to_try:
+            try:
+                # Mettre à jour uniquement les valeurs qui n'ont pas encore été converties
+                temp_result = pd.to_datetime(series_str[remaining_mask], format=date_format, errors='coerce')
+                valid_mask = temp_result.notna()
+                if valid_mask.any():
+                    result[remaining_mask.index[valid_mask]] = temp_result[valid_mask]
+                    format_success_count[date_format] = valid_mask.sum()
+                    # Mettre à jour le masque pour les valeurs restantes
+                    remaining_mask = mask_notna & result.isna() & mask_potential_dates
+                    if not remaining_mask.any():
+                        break
+            except Exception as e:
+                conversion_issues[f'format_error_{date_format}'] = str(e)
+                continue
+    
+    # Pour les valeurs restantes, essayer la détection automatique avec dayfirst=True pour forcer le format européen
+    remaining_mask = mask_notna & result.isna() & mask_potential_dates
+    if remaining_mask.any():
+        try:
+            # Forcer l'interprétation au format européen (jour en premier)
+            temp_result = pd.to_datetime(series_str[remaining_mask], dayfirst=True, errors='coerce')
+            valid_mask = temp_result.notna()
+            if valid_mask.any():
+                result[remaining_mask.index[valid_mask]] = temp_result[valid_mask]
+                format_success_count['auto_detect_dayfirst'] = valid_mask.sum()
+                remaining_mask = mask_notna & result.isna() & mask_potential_dates
+        except Exception as e:
+            conversion_issues['auto_detect_error'] = str(e)
+            
+    # Afficher les formats de date qui ont fonctionné
+    if format_success_count:
+        st.success(f"Formats de date détectés avec succès: {format_success_count}")
+        
+        # Si le format principal (jj/mm/aaaa) n'a pas été détecté, afficher un avertissement
+        if '%d/%m/%Y' not in format_success_count:
+            st.warning("""
+            ⚠️ Le format de date principal (jj/mm/aaaa) n'a pas été détecté dans votre fichier.
+            Pour de meilleurs résultats, utilisez le format jj/mm/aaaa (exemple: 15-07-2025).
+            """)
+    
+    # Extraction avancée pour les formats complexes (par exemple "Entretien Visio21/06/2025 18:00")
+    remaining_mask = mask_notna & result.isna()
+    pattern_matches = 0
+    if remaining_mask.any():
+        # Recherche de motifs de date dans les chaînes complexes
+        for idx in remaining_mask.index[remaining_mask]:
+            text = series_str.loc[idx]
+            
+            # Recherche de dates au format JJ/MM/AAAA ou jj/mm/aaaa
+            date_patterns = [
+                r'(\d{1,2}/\d{1,2}/\d{4})',      # Format spécifique jj/mm/aaaa
+                r'(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})',  # JJ/MM/AAAA ou jj/mm/aaaa
+                r'(\d{1,2}\s+[a-zA-Zéû]+\s+\d{2,4})'   # JJ mois AAAA
+            ]
+            
+            pattern_found = False
+            for pattern in date_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    pattern_found = True
+                    date_str = match.group(1)
+                    try:
+                        # Essayer de convertir la date extraite
+                        date_obj = pd.to_datetime(date_str, errors='coerce')
+                        if pd.notna(date_obj):
+                            result.loc[idx] = date_obj
+                            pattern_matches += 1
+                            break
+                    except Exception:
+                        continue
+            
+            if not pattern_found:
+                # Si aucun motif n'a été trouvé, enregistrer la valeur
+                if 'no_pattern_match' not in conversion_issues:
+                    conversion_issues['no_pattern_match'] = []
+                conversion_issues['no_pattern_match'].append(text)
+    
+    # Diagnostic des valeurs non converties
+    non_converted = mask_notna & result.isna()
+    if non_converted.any():
+        non_converted_count = non_converted.sum()
+        total_count = mask_notna.sum()
+        if non_converted_count > 0:
+            # Afficher un avertissement si plus de 10% des valeurs n'ont pas été converties
+            if non_converted_count > total_count * 0.1:
+                st.warning(f"⚠️ {non_converted_count} valeurs de date sur {total_count} n'ont pas pu être converties.")
+                # Afficher les statistiques de conversion
+                st.expander("📊 Détails des problèmes de conversion de dates", expanded=False).write({
+                    "Formats réussis": format_success_count,
+                    "Problèmes de conversion": conversion_issues,
+                    "Exemples de valeurs problématiques": series[non_converted].sample(min(10, non_converted_count)).tolist()
+                })
+    
+    # Afficher les statistiques sur les années trouvées, mais ne pas filtrer
+    if result.notna().any():
+        years_found = result[result.notna()].dt.year.value_counts().to_dict()
+        # Trier les années par ordre croissant pour une meilleure lisibilité
+        years_found = {k: years_found[k] for k in sorted(years_found.keys())}
+        
+        # Afficher un message informatif sur les années trouvées
+        if len(years_found) > 1:
+            st.info(f"📅 Années trouvées dans les dates: {years_found}")
+            
+            # Suggérer l'année la plus fréquente
+            most_common_year = max(years_found.items(), key=lambda x: x[1])[0]
+            st.info(f"💡 L'année la plus fréquente est {most_common_year}. Si toutes les dates devraient être de 2025, vérifiez le format de vos dates.")
+    
+    # Ne pas filtrer par année - garder toutes les dates valides
+    # Si vous souhaitez réactiver le filtrage par année, décommentez les lignes ci-dessous
+    # valid_dates_mask = result.notna() & (result.dt.year == 2025)
+    # invalid_year_mask = result.notna() & (result.dt.year != 2025)
+    # result[invalid_year_mask] = pd.NaT
+    
+    return result
+
+
+def adjust_dates_to_month_range(df, date_column):
+    """Ajuste les dates pour avoir une plage complète du 1er au dernier jour du mois.
+    
+    Args:
+        df (DataFrame): DataFrame contenant les dates à ajuster
+        date_column (str): Nom de la colonne contenant les dates
+        
+    Returns:
+        DataFrame: DataFrame avec les colonnes ajoutées:
+            - 'Mois': Format 'YYYY-MM'
+            - 'Premier_Jour_Mois': Premier jour du mois (date)
+            - 'Dernier_Jour_Mois': Dernier jour du mois (date)
+    """
+    # Vérifier si la colonne existe
+    if date_column not in df.columns:
+        st.error(f"❌ Colonne {date_column} non trouvée dans les données.")
+        return df
+    
+    # Convertir la colonne en datetime si ce n'est pas déjà fait
+    if not pd.api.types.is_datetime64_dtype(df[date_column]):
+        df[date_column] = safe_to_datetime(df[date_column])
+    
+    # Créer une colonne 'Mois' au format 'YYYY-MM'
+    df['Mois'] = df[date_column].dt.strftime('%Y-%m')
+    
+    # Créer une colonne avec le premier jour du mois
+    df['Premier_Jour_Mois'] = df[date_column].dt.to_period('M').dt.to_timestamp()
+    
+    # Créer une colonne avec le dernier jour du mois
+    # Astuce: ajouter 1 mois au premier jour puis soustraire 1 jour
+    df['Dernier_Jour_Mois'] = (df['Premier_Jour_Mois'] + pd.DateOffset(months=1) - pd.DateOffset(days=1))
+    
+    return df
+
+
+def extract_conseiller(df, column=None):
+    """Extrait le nom du conseiller à partir d'une colonne spécifiée ou recherche parmi plusieurs colonnes possibles.
+    
+    Args:
+        df: DataFrame contenant les données
+        column: Nom de la colonne contenant l'information du conseiller (optionnel)
+        
+    Returns:
+        DataFrame avec une colonne 'Conseiller' standardisée
+    """
+    # Liste des noms de colonnes possibles pour le conseiller
+    # Prioriser la colonne exacte 'Conseiller' fournie par l'utilisateur
+    possible_columns = [
+        # Colonne exacte de l'utilisateur en priorité
+        'Conseiller',
+        # Autres variantes possibles
+        'conseiller', 'CONSEILLER',
+        'Conseiller', 'Conseiller', 'Conseiller',
+        'Agent', 'agent', 'AGENT',
+        'Vendeur', 'vendeur', 'VENDEUR',
+        'Commercial', 'commercial', 'COMMERCIAL',
+        'Staff', 'staff', 'STAFF',
+        'User', 'user', 'USER',
+        'Utilisateur', 'utilisateur', 'UTILISATEUR',
+        'Conseiller affecté', 'conseiller affecté', 'CONSEILLER AFFECTÉ',
+        'Assigned Conseiller', 'assigned Conseiller', 'ASSIGNED Conseiller'
+    ]
+    
+    # Si une colonne spécifique est fournie, l'utiliser
+    if column and column in df.columns:
+        df['Conseiller'] = df[column].fillna('Inconnu')
+    else:
+        # Sinon, rechercher parmi les colonnes possibles
+        found = False
+        for col in possible_columns:
+            if col in df.columns and df[col].notna().any():
+                df['Conseiller'] = df[col].fillna('Inconnu')
+                found = True
+                break
+        
+        # Si aucune colonne n'est trouvée, créer une colonne par défaut
+        if not found:
+            st.warning("⚠️ Aucune colonne de conseiller trouvée. Utilisation de 'Inconnu' par défaut.")
+            df['Conseiller'] = 'Inconnu'
+    
+    # Nettoyer les valeurs
+    if 'Conseiller' in df.columns:
+        # Extraire le nom du conseiller si au format "Conseiller 'Nom'" ou "Conseiller 'Nom'"
+        pattern = r"(?:Conseiller|Conseiller|Agent|Staff|Par|Commercial|Vendeur)['\s:]*([^']+)['\s]*"
+        mask = df['Conseiller'].astype(str).str.contains(pattern, case=False, regex=True)
+        if mask.any():
+            df.loc[mask, 'Conseiller'] = df.loc[mask, 'Conseiller'].astype(str).str.extract(pattern, expand=False)
+        
+        # Nettoyer les espaces et remplacer les valeurs vides
+        df['Conseiller'] = df['Conseiller'].astype(str).str.strip().replace('', 'Inconnu').fillna('Inconnu')
+    
+    return df
+
+
+def nettoyer_email(email_series):
+    """Nettoie une série d'emails en les mettant en minuscules et en supprimant les espaces."""
+    if email_series.dtype != object:
+        return email_series
+    return email_series.str.lower().str.strip()
+
+
+def read_excel_robust(uploaded_file, header=0):
+    """Tente de lire un fichier Excel avec différentes méthodes et moteurs.
+    
+    Args:
+        uploaded_file: Fichier téléchargé via st.file_uploader
+        header: Index de la ligne d'en-tête (par défaut 0)
+        
+    Returns:
+        DataFrame: Données du fichier Excel
+        
+    Raises:
+        Exception: Si aucune méthode ne fonctionne
+    """
+    error_messages = []
+    
+    # Méthode 1: Lecture directe avec pandas
+    try:
+        df = pd.read_excel(uploaded_file, header=header)
+        st.success("✅ Fichier lu avec succès (méthode directe pandas)")
+        return clean_dataframe(df)
+    except Exception as e:
+        error_messages.append(f"Méthode directe pandas: {str(e)}")
+    
+    # Méthode 2: Utiliser openpyxl comme moteur
+    try:
+        df = pd.read_excel(uploaded_file, header=header, engine='openpyxl')
+        st.success("✅ Fichier lu avec succès (moteur openpyxl)")
+        return clean_dataframe(df)
+    except Exception as e:
+        error_messages.append(f"Moteur openpyxl: {str(e)}")
+    
+    # Méthode 3: Utiliser xlrd comme moteur
+    try:
+        df = pd.read_excel(uploaded_file, header=header, engine='xlrd')
+        st.success("✅ Fichier lu avec succès (moteur xlrd)")
+        return clean_dataframe(df)
+    except Exception as e:
+        error_messages.append(f"Moteur xlrd: {str(e)}")
+    
+    # Méthode 4: Utiliser BytesIO
+    try:
+        import io
+        bytes_data = uploaded_file.getvalue()
+        df = pd.read_excel(io.BytesIO(bytes_data), header=header)
+        st.success("✅ Fichier lu avec succès (méthode BytesIO)")
+        return clean_dataframe(df)
+    except Exception as e:
+        error_messages.append(f"Méthode BytesIO: {str(e)}")
+    
+    # Méthode 5: Sauvegarder temporairement et lire
+    try:
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+            tmp.write(uploaded_file.getvalue())
+            tmp_path = tmp.name
+        
+        df = pd.read_excel(tmp_path, header=header)
+        os.unlink(tmp_path)  # Supprimer le fichier temporaire
+        st.success("✅ Fichier lu avec succès (méthode fichier temporaire)")
+        return clean_dataframe(df)
+    except Exception as e:
+        error_messages.append(f"Méthode fichier temporaire: {str(e)}")
+        try:
+            os.unlink(tmp_path)  # Essayer de supprimer le fichier temporaire en cas d'erreur
+        except:
+            pass
+    
+    # Méthode 6: Essayer de lire comme CSV
+    try:
+        df = pd.read_csv(uploaded_file, header=header)
+        st.success("✅ Fichier lu avec succès (format CSV)")
+        return clean_dataframe(df)
+    except Exception as e:
+        error_messages.append(f"Format CSV: {str(e)}")
+    
+    # Méthode 7: Essayer de lire toutes les feuilles
+    try:
+        all_sheets = pd.read_excel(uploaded_file, sheet_name=None, header=header)
+        if all_sheets:
+            # Prendre la première feuille
+            sheet_name = list(all_sheets.keys())[0]
+            df = all_sheets[sheet_name]
+            st.success(f"✅ Fichier lu avec succès (feuille: {sheet_name})")
+            return clean_dataframe(df)
+    except Exception as e:
+        error_messages.append(f"Lecture multi-feuilles: {str(e)}")
+    
+    # Si toutes les méthodes échouent, afficher les erreurs et lever une exception
+    error_details = "\n".join(error_messages)
+    st.error(f"❌ Impossible de lire le fichier Excel. Erreurs rencontrées:\n{error_details}")
+    raise Exception(f"Impossible de lire le fichier Excel après plusieurs tentatives:\n{error_details}")
+
+
+def clean_dataframe(df):
+    """Nettoie un DataFrame en supprimant les colonnes vides et les colonnes 'Unnamed'."""
+    # Supprimer les colonnes vides
+    df = df.dropna(axis=1, how='all')
+    
+    # Supprimer les colonnes 'Unnamed'
+    df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+    
+    # Supprimer les lignes entièrement vides
+    df = df.dropna(how='all')
+    
+    return df
