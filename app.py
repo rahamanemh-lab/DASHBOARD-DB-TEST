@@ -27,27 +27,19 @@ import json
 import boto3
 
 def test_crypto_lightsail_connection():
-    """Test de connexion à la base LightSail pour les données crypto - SÉCURISÉ"""
+    """Test de connexion à la base LightSail pour les données crypto"""
     try:
-        # UNIQUEMENT variables d'environnement (injectées par GitLab CI/CD)
-        required_vars = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME']
-        missing_vars = [var for var in required_vars if var not in os.environ]
-        
-        if missing_vars:
-            return None, f"Variables manquantes: {', '.join(missing_vars)}"
-        
-        # Connexion avec variables d'environnement uniquement
+        # Utiliser st.secrets pour Streamlit Cloud
         conn = pymysql.connect(
-            host=os.environ['DB_HOST'],
-            user=os.environ['DB_USER'],
-            password=os.environ['DB_PASSWORD'],
-            database=os.environ['DB_NAME'],
+            host=st.secrets["database"]["host"],
+            user=st.secrets["database"]["user"],
+            password=st.secrets["database"]["password"],
+            database=st.secrets["database"]["dbname"],
             port=3306,
             charset='utf8mb4',
             connect_timeout=10
         )
-        return conn, "Variables d'environnement GitLab CI/CD"
-            
+        return conn, "Streamlit Secrets"
     except Exception as e:
         return None, str(e)
 
