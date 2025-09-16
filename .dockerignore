@@ -1,0 +1,78 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+
+# Tests
+tests/
+.pytest_cache/
+test-results.xml
+
+# CI/CD
+.gitlab-ci.yml
+.github/
+
+# Environnements Python
+streamlit_env/
+venv/
+env/
+.env
+.venv/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Données sensibles et temporaires
+*.csv
+*.xlsx
+data/
+backups/
+temp/
+
+# Build et distribution
+build/
+dist/
+*.egg-info/
+
+# Scripts de déploiement (pas nécessaires dans le container)
+scripts/deploy.sh
+scripts/backup.sh
+scripts/monitor.sh
+
+# Configuration locale
+config/local_config.yaml
+.streamlit/secrets.toml
+
+# Fichiers de développement
+requirements_dev.txt
+run.sh
+fix_data_conversion.py
+temp_function.py
+
+# Rapports de sécurité
+bandit-report.json
