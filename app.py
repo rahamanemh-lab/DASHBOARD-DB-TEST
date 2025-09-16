@@ -21,10 +21,13 @@ from typing import Optional, Dict, Any
 # =============================================================================
 # SECTION CRYPTO - TEST CONNEXION LIGHTSAIL
 # =============================================================================
-
 import pymysql
 import json
 import boto3
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
 def test_crypto_lightsail_connection():
     """Test de connexion à la base LightSail pour les données crypto"""
@@ -44,87 +47,212 @@ def test_crypto_lightsail_connection():
         return None, str(e)
 
 def render_crypto_test_section():
-    """Section de test crypto dans le dashboard"""
+    """Section crypto complète avec graphiques dans le dashboard"""
     st.markdown("---")
-    st.subheader("🔍 Test Connexion Crypto LightSail")
+    st.subheader("🔍 Dashboard Crypto LightSail")
     
-    col1, col2 = st.columns([2, 1])
+    # Test de connexion
+    conn, source = test_crypto_lightsail_connection()
     
-    with col1:
-        if st.button("🔗 Tester connexion LightSail"):
-            with st.spinner("Test de connexion en cours..."):
-                conn, source = test_crypto_lightsail_connection()
+    if conn:
+        st.success(f"✅ Connexion réussie ! Source : {source}")
+        
+        try:
+            cursor = conn.cursor()
+            
+            # Informations de base
+            cursor.execute("SELECT NOW() as current_time, VERSION() as version")
+            result = cursor.fetchone()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info(f"🕐 Heure DB : {result[0]}")
+            with col2:
+                st.info(f"📋 Version : {result[1]}")
+            
+            # Lister les tables
+            cursor.execute("SHOW TABLES")
+            tables = cursor.fetchall()
+            
+            if tables:
+                table_names = [table[0] for table in tables]
                 
-                if conn:
-                    try:
-                        # Test de base
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT NOW() as current_time, VERSION() as version")
-                        result = cursor.fetchone()
+                # Chercher une table crypto
+                crypto_tables = [t for t in table_names if 'crypto' in t.lower()]
+                if crypto_tables:
+                    crypto_table = crypto_tables[0]
+                    st.success(f"🪙 Table crypto trouvée : `{crypto_table}`")
+                    
+                    # Compter les lignes
+                    cursor.execute(f"SELECT COUNT(*) FROM {crypto_table}")
+                    count = cursor.fetchone()[0]
+                    
+                    if count > 0:
+                        # Métriques principales
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("📊 Total lignes", f"{count:,}")
                         
-                        st.success(f"✅ Connexion réussie ! Source : {source}")
-                        st.info(f"🕐 Heure DB : {result[0]}")
-                        st.info(f"📋 Version : {result[1]}")
+                        # Récupérer les assets uniques
+                        cursor.execute(f"SELECT DISTINCT asset FROM {crypto_table}")
+                        assets = [row[0] for row in cursor.fetchall()]
+                        with col2:
+                            st.metric("🪙 Assets uniques", len(assets))
                         
-                        # Lister les tables
-                        cursor.execute("SHOW TABLES")
-                        tables = cursor.fetchall()
-                        if tables:
-                            table_names = [table[0] for table in tables]
-                            st.write(f"**Tables disponibles :** {', '.join(table_names)}")
+                        # Dernière mise à jour
+                        cursor.execute(f"SELECT MAX(timestamp) FROM {crypto_table}")
+                        last_update = cursor.fetchone()[0]
+                        with col3:
+                            if last_update:
+                                st.metric("🕐 Dernière MAJ", last_update.strftime("%H:%M:%S"))
+                        
+                        # Sélecteur de période
+                        st.subheader("📈 Visualisations Crypto")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            period = st.selectbox(
+                                "Période d'analyse",
+                                ["Dernière heure", "Dernières 24h", "Dernière semaine", "Tout"],
+                                index=1
+                            )
+                        
+                        with col2:
+                            selected_assets = st.multiselect(
+                                "Sélectionner les assets",
+                                assets,
+                                default=assets[:3] if len(assets) >= 3 else assets
+                            )
+                        
+                        if selected_assets:
+                            # Construire la requête selon la période
+                            where_clause = ""
+                            if period == "Dernière heure":
+                                where_clause = "AND timestamp >= DATE_SUB(NOW(), INTERVAL 1 HOUR)"
+                            elif period == "Dernières 24h":
+                                where_clause = "AND timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)"
+                            elif period == "Dernière semaine":
+                                where_clause = "AND timestamp >= DATE_SUB(NOW(), INTERVAL 1 WEEK)"
                             
-                            # Chercher une table crypto
-                            crypto_tables = [t for t in table_names if 'crypto' in t.lower()]
-                            if crypto_tables:
-                                crypto_table = crypto_tables[0]
-                                st.success(f"🪙 Table crypto trouvée : `{crypto_table}`")
+                            # Préparer la clause IN pour les assets
+                            assets_placeholder = ','.join(['%s'] * len(selected_assets))
+                            
+                            # Requête pour les données du graphique
+                            query = f"""
+                            SELECT timestamp, asset, CAST(price AS DECIMAL(15,6)) as price
+                            FROM {crypto_table}
+                            WHERE asset IN ({assets_placeholder}) {where_clause}
+                            ORDER BY timestamp DESC
+                            LIMIT 1000
+                            """
+                            
+                            cursor.execute(query, selected_assets)
+                            chart_data = cursor.fetchall()
+                            
+                            if chart_data:
+                                # Créer le DataFrame
+                                df_chart = pd.DataFrame(chart_data, columns=['timestamp', 'asset', 'price'])
+                                df_chart['timestamp'] = pd.to_datetime(df_chart['timestamp'])
+                                df_chart['price'] = pd.to_numeric(df_chart['price'])
                                 
-                                # Compter les lignes
-                                cursor.execute(f"SELECT COUNT(*) FROM {crypto_table}")
-                                count = cursor.fetchone()[0]
-                                st.metric("📊 Lignes dans la table crypto", f"{count:,}")
+                                # Graphique principal - Evolution temporelle
+                                fig_line = px.line(
+                                    df_chart.sort_values('timestamp'),
+                                    x='timestamp',
+                                    y='price',
+                                    color='asset',
+                                    title=f"Evolution des prix crypto - {period}",
+                                    labels={'price': 'Prix (USD)', 'timestamp': 'Temps'}
+                                )
+                                fig_line.update_layout(height=500)
+                                st.plotly_chart(fig_line, use_container_width=True)
                                 
-                                # Dernières données (aperçu)
-                                if count > 0:
-                                    cursor.execute(f"""
-                                        SELECT timestamp, asset, fiat, price 
-                                        FROM {crypto_table} 
-                                        ORDER BY timestamp DESC 
-                                        LIMIT 5
-                                    """)
-                                    recent_data = cursor.fetchall()
-                                    
-                                    st.write("**📈 Dernières données crypto :**")
-                                    for row in recent_data:
-                                        st.write(f"• {row[0]} | {row[1]}/{row[2]} : ${row[3]}")
+                                # Graphiques en colonnes
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    # Prix actuels
+                                    latest_prices = df_chart.groupby('asset')['price'].last().reset_index()
+                                    fig_bar = px.bar(
+                                        latest_prices,
+                                        x='asset',
+                                        y='price',
+                                        title="Prix actuels par Asset",
+                                        labels={'price': 'Prix (USD)', 'asset': 'Asset'}
+                                    )
+                                    st.plotly_chart(fig_bar, use_container_width=True)
+                                
+                                with col2:
+                                    # Distribution des prix
+                                    fig_box = px.box(
+                                        df_chart,
+                                        x='asset',
+                                        y='price',
+                                        title="Distribution des prix",
+                                        labels={'price': 'Prix (USD)', 'asset': 'Asset'}
+                                    )
+                                    st.plotly_chart(fig_box, use_container_width=True)
+                                
+                                # Statistiques détaillées
+                                st.subheader("📊 Statistiques détaillées")
+                                stats = df_chart.groupby('asset')['price'].agg([
+                                    'count', 'mean', 'min', 'max', 'std'
+                                ]).round(4)
+                                stats.columns = ['Nb points', 'Prix moyen', 'Prix min', 'Prix max', 'Écart-type']
+                                
+                                # Ajouter évolution (%)
+                                evolution = df_chart.groupby('asset').apply(
+                                    lambda x: ((x['price'].iloc[-1] - x['price'].iloc[0]) / x['price'].iloc[0] * 100) 
+                                    if len(x) > 1 else 0
+                                ).round(2)
+                                stats['Evolution (%)'] = evolution
+                                
+                                st.dataframe(stats, use_container_width=True)
+                                
+                                # Dernières données
+                                st.subheader("📋 Dernières données")
+                                recent_data = df_chart.sort_values('timestamp', ascending=False).head(10)
+                                recent_data['timestamp'] = recent_data['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                                st.dataframe(recent_data, use_container_width=True)
+                                
                             else:
-                                st.warning("⚠️ Aucune table crypto trouvée")
+                                st.warning("⚠️ Aucune donnée trouvée pour la période sélectionnée")
+                        
                         else:
-                            st.warning("⚠️ Aucune table trouvée")
-                        
-                        cursor.close()
-                        conn.close()
-                        
-                    except Exception as e:
-                        st.error(f"❌ Erreur lors des requêtes : {str(e)}")
-                        
+                            st.info("Sélectionnez au moins un asset pour voir les graphiques")
+                    
+                    else:
+                        st.warning("⚠️ Table crypto vide")
+                
                 else:
-                    st.error(f"❌ Connexion échouée : {source}")
+                    st.warning("⚠️ Aucune table crypto trouvée")
+                    st.write(f"**Tables disponibles :** {', '.join(table_names)}")
+            
+            else:
+                st.warning("⚠️ Aucune table trouvée dans la base")
+            
+            cursor.close()
+            conn.close()
+            
+        except Exception as e:
+            st.error(f"❌ Erreur lors des requêtes : {str(e)}")
     
-    with col2:
-        st.markdown("**Configuration requise :**")
-        st.code("""
-# Variables GitLab CI/CD :
-DB_HOST = endpoint-lightsail
-DB_USER = admin  
-DB_PASSWORD = ***
-DB_NAME = crypto_datalake
-
-# Ou AWS Secret :
-SECRET_ID = crypto-db-secret
-        """)
+    else:
+        st.error(f"❌ Connexion échouée : {source}")
+        st.warning("⚠️ Vérifiez la configuration des secrets de base de données dans Streamlit Cloud")
+        
+        # Instructions de configuration
+        with st.expander("🔧 Configuration des secrets", expanded=True):
+            st.code("""
+# Dans Streamlit Cloud > Secrets:
+[database]
+host = "votre-endpoint-lightsail.region.rds.amazonaws.com"
+user = "admin"
+password = "votre-mot-de-passe"
+dbname = "crypto_datalake"
+            """)
     
-    # Section upload test CSV/Excel crypto
+    # Section upload test CSV/Excel crypto (inchangée)
     st.markdown("---")
     st.subheader("📄 Test Upload CSV/Excel Crypto")
     
@@ -156,35 +284,27 @@ SECRET_ID = crypto-db-secret
                 st.write("**📊 Aperçu des données :**")
                 st.dataframe(df_crypto.head(), use_container_width=True)
             
-            # Statistiques rapides
-            if not df_crypto.empty:
-                st.write("**📈 Statistiques rapides :**")
-                col1, col2, col3 = st.columns(3)
+            # Graphique du fichier uploadé si les colonnes appropriées existent
+            if all(col in df_crypto.columns for col in ['timestamp', 'asset', 'price']):
+                st.subheader("📈 Visualisation du fichier uploadé")
+                df_crypto['timestamp'] = pd.to_datetime(df_crypto['timestamp'], errors='coerce')
+                df_crypto['price'] = pd.to_numeric(df_crypto['price'], errors='coerce')
                 
-                with col1:
-                    if 'asset' in df_crypto.columns:
-                        unique_assets = df_crypto['asset'].nunique()
-                        st.metric("🪙 Assets uniques", unique_assets)
-                
-                with col2:
-                    if 'price' in df_crypto.columns:
-                        avg_price = pd.to_numeric(df_crypto['price'], errors='coerce').mean()
-                        if not pd.isna(avg_price):
-                            st.metric("💰 Prix moyen", f"${avg_price:.2f}")
-                
-                with col3:
-                    if 'timestamp' in df_crypto.columns:
-                        latest_time = pd.to_datetime(df_crypto['timestamp'], errors='coerce').max()
-                        if not pd.isna(latest_time):
-                            st.metric("🕐 Dernière donnée", latest_time.strftime("%Y-%m-%d %H:%M"))
+                df_clean = df_crypto.dropna(subset=['timestamp', 'price'])
+                if not df_clean.empty:
+                    fig_upload = px.line(
+                        df_clean,
+                        x='timestamp',
+                        y='price',
+                        color='asset' if 'asset' in df_clean.columns else None,
+                        title="Données crypto du fichier uploadé"
+                    )
+                    st.plotly_chart(fig_upload, use_container_width=True)
             
         except Exception as e:
             st.error(f"❌ Erreur lecture fichier : {str(e)}")
     
     st.markdown("---")
-
-
-
 
 #=============================================================================
 
