@@ -79,29 +79,31 @@ except Exception as e:
     st.error(f"❌ Connexion échouée : {e}")
     st.stop()
 
-# Lecture + graphe
-df = pd.read_sql("""
-    SELECT ts_utc AS ts, asset, fiat, price
-    FROM crypto_prices
-    WHERE ts_utc >= NOW() - INTERVAL 1 DAY
-    ORDER BY ts_utc DESC
-    LIMIT 500
-""", conn)
-conn.close()
 
-if df.empty:
-    st.warning("Aucune ligne dans crypto_prices (24h).")
-else:
-    st.dataframe(df.head(20), use_container_width=True)
-    df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
-    df = df.dropna(subset=["ts","price"]).sort_values(["ts","asset"])
-    pivot = (
-        df.groupby(["ts","asset"], as_index=False)["price"].mean()
-          .pivot(index="ts", columns="asset", values="price")
-          .sort_index()
-    )
-    st.subheader("📈 Prix par asset (dernières 24h)")
-    st.line_chart(pivot)
+def render_crypto_test_section():
+    # Lecture + graphe
+    df = pd.read_sql("""
+        SELECT ts_utc AS ts, asset, fiat, price
+        FROM crypto_prices
+        WHERE ts_utc >= NOW() - INTERVAL 1 DAY
+        ORDER BY ts_utc DESC
+        LIMIT 500
+    """, conn)
+    conn.close()
+    
+    if df.empty:
+        st.warning("Aucune ligne dans crypto_prices (24h).")
+    else:
+        st.dataframe(df.head(20), use_container_width=True)
+        df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+        df = df.dropna(subset=["ts","price"]).sort_values(["ts","asset"])
+        pivot = (
+            df.groupby(["ts","asset"], as_index=False)["price"].mean()
+              .pivot(index="ts", columns="asset", values="price")
+              .sort_index()
+        )
+        st.subheader("📈 Prix par asset (dernières 24h)")
+        st.line_chart(pivot)
 
 
 
