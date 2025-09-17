@@ -107,6 +107,63 @@ def render_crypto_test_section():
 
 
 
+# =============================================================================
+
+# =============================================================================
+def make_epargne_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
+    """
+    Map crypto -> schéma ÉPARGNE attendu par le dashboard.
+    Colonnes produites : 
+      - Date de souscription (datetime)
+      - Montant (float)
+      - Montant du placement (float)  # utile pour 'Retard cumulé'
+      - Conseiller (str)
+      - Produit (str)
+      - Statut/Étape (str)
+    """
+    if df_crypto is None or df_crypto.empty:
+        return pd.DataFrame(columns=[
+            "Date de souscription","Montant","Montant du placement","Conseiller","Produit","Statut/Étape"
+        ])
+    df = df_crypto.copy()
+    df["Date de souscription"] = pd.to_datetime(df["ts"], errors="coerce")  # ts vient de ts_utc AS ts
+    df["Montant"] = pd.to_numeric(df["price"], errors="coerce")
+    df["Montant du placement"] = df["Montant"]  # pour la section 'Retard cumulé' :contentReference[oaicite:3]{index=3}
+    df["Conseiller"] = "Demo (Lightsail)"
+    df["Produit"] = df["asset"].astype(str).str.upper()
+    df["Statut/Étape"] = "Validé"
+    out = df[[
+        "Date de souscription","Montant","Montant du placement","Conseiller","Produit","Statut/Étape"
+    ]].dropna(subset=["Date de souscription","Montant"])
+    return out
+
+
+def make_immo_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
+    """
+    Map crypto -> schéma IMMOBILIER attendu par le dashboard.
+    Colonnes produites :
+      - Date de création (datetime)
+      - Conseiller (str)
+      - Statut (str)
+      - Montant (float)
+      - Type de bien (str)
+    """
+    if df_crypto is None or df_crypto.empty:
+        return pd.DataFrame(columns=[
+            "Date de création","Conseiller","Statut","Montant","Type de bien"
+        ])
+    df = df_crypto.copy()
+    df["Date de création"] = pd.to_datetime(df["ts"], errors="coerce")
+    df["Montant"] = pd.to_numeric(df["price"], errors="coerce")
+    df["Conseiller"] = "Demo (Lightsail)"
+    df["Statut"] = "En cours"
+    # on “réutilise” asset comme pseudo-type
+    df["Type de bien"] = df["asset"].astype(str).str.upper()
+    out = df[["Date de création","Conseiller","Statut","Montant","Type de bien"]].dropna(subset=["Date de création","Montant"])
+    return out
+
+
+# =============================================================================
 
 
 # =============================================================================
@@ -1357,7 +1414,42 @@ class DashboardApp:
                         analyser_pipe_collecte_epargne(df_epargne)
             
             self.render_debug_info("Épargne")
-        
+
+
+# =============================================================================
+            if df_epargne is None:
+                df_epargne = make_epargne_from_crypto(df)
+                if not df_epargne.empty:
+                    st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Épargne.")
+                    st.markdown("---")
+                
+                    # Créer des sous-onglets pour l'analyse épargne
+                    epargne_subtab = st.selectbox(
+                        "📊 Type d'analyse épargne:",
+                        ["Performance Globale", "Performance par Conseiller", "Analyse par Groupe", "Pipe de Collecte"],
+                        key="epargne_subtab"
+                    )
+                    
+                    st.markdown("---")
+                    
+                    if epargne_subtab == "Performance Globale":
+                        with st.spinner("📊 Analyse de la performance globale..."):
+                            analyser_souscriptions_epargne(df_epargne)
+                    elif epargne_subtab == "Performance par Conseiller":
+                        with st.spinner("📊 Analyse par conseiller..."):
+                            analyser_performance_conseillers_epargne(df_epargne)
+                    elif epargne_subtab == "Analyse par Groupe":
+                        with st.spinner("📊 Analyse par groupe..."):
+                            analyser_groupes_epargne(df_epargne)
+                    elif epargne_subtab == "Pipe de Collecte":
+                        with st.spinner("📊 Analyse du pipe de collecte..."):
+                            analyser_pipe_collecte_epargne(df_epargne)
+                
+                self.render_debug_info("Épargne")
+                # =============================================================================
+
+
+
         elif selected_tab == "🏢 Immobilier":
             st.markdown('<h2 class="sub-header">🏢 Analyse Immobilier</h2>', unsafe_allow_html=True)
             
@@ -1393,6 +1485,38 @@ class DashboardApp:
                         analyser_groupes_dossiers_immo(df_immo)
             
             self.render_debug_info("Immobilier")
+                # =============================================================================
+                if df_immo is None:
+                    df_immo = make_immo_from_crypto(df)
+                    if not df_immo.empty:
+                        st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Immobilier.")
+                        st.markdown("---")
+                
+                        # Créer des sous-onglets pour l'analyse immobilière
+                        immo_subtab = st.selectbox(
+                            "🏢 Type d'analyse immobilier:",
+                            ["Suivi Global", "Analyse par Statut", "Analyse par Groupe"],
+                            key="immo_subtab"
+                        )
+                        
+                        st.markdown("---")
+                        
+                        if immo_subtab == "Suivi Global":
+                            with st.spinner("🏢 Analyse du suivi global..."):
+                                analyser_suivi_immo(df_immo)
+                        elif immo_subtab == "Analyse par Statut":
+                            with st.spinner("🏢 Analyse par statut..."):
+                                analyser_statuts_dossiers_immo(df_immo)
+                        elif immo_subtab == "Analyse par Groupe":
+                            with st.spinner("🏢 Analyse par groupe..."):
+                                analyser_groupes_dossiers_immo(df_immo)
+
+  
+            self.render_debug_info("Immobilier")
+
+
+               # =============================================================================
+
         
         elif selected_tab == "📞 Entretiens":
             with st.spinner("📞 Chargement des analyses d'entretiens..."):
