@@ -110,12 +110,12 @@ else:
 # =============================================================================
 
 # ⚠️ CECI DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT
-st.set_page_config(
-    page_title="Dashboard Souscriptions",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# st.set_page_config(
+#     page_title="Dashboard Souscriptions",
+#     page_icon="📊",
+#     layout="wide",
+#     initial_sidebar_state="expanded"
+# )
 
 # Configuration du path pour les imports
 project_root = Path(__file__).parent
