@@ -172,7 +172,7 @@ import boto3
 from io import BytesIO
 from urllib.parse import urlparse
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_resource(ttl=300, show_spinner=False)
 def _get_s3_client():
     # lit d’abord dans st.secrets, sinon variables d’env
     region = (st.secrets.get("s3", {}) or {}).get("region") or os.getenv("AWS_DEFAULT_REGION", "eu-north-1")
@@ -203,7 +203,7 @@ def _s3_conf():
         "extensions": (s3sec.get("extensions") or "xlsx,csv").split(",")
     }
 
-@st.cache_data(ttl=120, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False, hash_funcs={"botocore.client.S3": lambda _: None})
 def s3_latest_key(bucket: str, prefix: str, allowed_ext=("xlsx","xls","csv")) -> str | None:
     s3 = _get_s3_client()
     paginator = s3.get_paginator("list_objects_v2")
@@ -218,7 +218,7 @@ def s3_latest_key(bucket: str, prefix: str, allowed_ext=("xlsx","xls","csv")) ->
                     latest, latest_ts = key, ts
     return latest
 
-@st.cache_data(ttl=120, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False, hash_funcs={"botocore.client.S3": lambda _: None})
 def s3_read_excel_or_csv(bucket: str, key: str) -> pd.DataFrame | None:
     s3 = _get_s3_client()
     obj = s3.get_object(Bucket=bucket, Key=key)
@@ -226,7 +226,7 @@ def s3_read_excel_or_csv(bucket: str, key: str) -> pd.DataFrame | None:
     if key.lower().endswith((".xlsx",".xls")):
         return pd.read_excel(BytesIO(data))
     elif key.lower().endswith(".csv"):
-        # essai auto d’encodage ; ajuste si besoin
+        # essai auto d'encodage ; ajuste si besoin
         try:
             return pd.read_csv(BytesIO(data))
         except Exception:
