@@ -1518,34 +1518,34 @@ class DashboardApp:
 
 # =============================================================================
             if df_epargne is None:
-                df_epargne = make_epargne_from_crypto(df)
-                if not df_epargne.empty:
-                    st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Épargne.")
-                    st.markdown("---")
+#                 df_epargne = make_epargne_from_crypto(df)
+#                 if not df_epargne.empty:
+#                     st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Épargne.")
+#                     st.markdown("---")
                 
-                    # Créer des sous-onglets pour l'analyse épargne
-                    epargne_subtab = st.selectbox(
-                        "📊 Type d'analyse épargne:",
-                        ["Performance Globale", "Performance par Conseiller", "Analyse par Groupe", "Pipe de Collecte"],
-                        key="epargne_subtab"
-                    )
+#                     # Créer des sous-onglets pour l'analyse épargne
+#                     epargne_subtab = st.selectbox(
+#                         "📊 Type d'analyse épargne:",
+#                         ["Performance Globale", "Performance par Conseiller", "Analyse par Groupe", "Pipe de Collecte"],
+#                         key="epargne_subtab"
+#                     )
                     
-                    st.markdown("---")
+#                     st.markdown("---")
                     
-                    if epargne_subtab == "Performance Globale":
-                        with st.spinner("📊 Analyse de la performance globale..."):
-                            analyser_souscriptions_epargne(df_epargne)
-                    elif epargne_subtab == "Performance par Conseiller":
-                        with st.spinner("📊 Analyse par conseiller..."):
-                            analyser_performance_conseillers_epargne(df_epargne)
-                    elif epargne_subtab == "Analyse par Groupe":
-                        with st.spinner("📊 Analyse par groupe..."):
-                            analyser_groupes_epargne(df_epargne)
-                    elif epargne_subtab == "Pipe de Collecte":
-                        with st.spinner("📊 Analyse du pipe de collecte..."):
-                            analyser_pipe_collecte_epargne(df_epargne)
+#                     if epargne_subtab == "Performance Globale":
+#                         with st.spinner("📊 Analyse de la performance globale..."):
+#                             analyser_souscriptions_epargne(df_epargne)
+#                     elif epargne_subtab == "Performance par Conseiller":
+#                         with st.spinner("📊 Analyse par conseiller..."):
+#                             analyser_performance_conseillers_epargne(df_epargne)
+#                     elif epargne_subtab == "Analyse par Groupe":
+#                         with st.spinner("📊 Analyse par groupe..."):
+#                             analyser_groupes_epargne(df_epargne)
+#                     elif epargne_subtab == "Pipe de Collecte":
+#                         with st.spinner("📊 Analyse du pipe de collecte..."):
+#                             analyser_pipe_collecte_epargne(df_epargne)
                 
-                self.render_debug_info("Épargne")
+#                 self.render_debug_info("Épargne")
                 # =============================================================================
 
 
@@ -1595,33 +1595,33 @@ class DashboardApp:
             
             self.render_debug_info("Immobilier")
                 # =============================================================================
-            if df_immo is None:
-                df_immo = make_immo_from_crypto(df)
-                if not df_immo.empty:
-                    st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Immobilier.")
-                    st.markdown("---")
+#             if df_immo is None:
+#                 df_immo = make_immo_from_crypto(df)
+#                 if not df_immo.empty:
+#                     st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Immobilier.")
+#                     st.markdown("---")
                 
-                    # Créer des sous-onglets pour l'analyse immobilière
-                    immo_subtab = st.selectbox(
-                        "🏢 Type d'analyse immobilier:",
-                        ["Suivi Global", "Analyse par Statut", "Analyse par Groupe"],
-                        key="immo_subtab"
-                        )
+#                     # Créer des sous-onglets pour l'analyse immobilière
+#                     immo_subtab = st.selectbox(
+#                         "🏢 Type d'analyse immobilier:",
+#                         ["Suivi Global", "Analyse par Statut", "Analyse par Groupe"],
+#                         key="immo_subtab"
+#                         )
                         
-                    st.markdown("---")
+#                     st.markdown("---")
                         
-                    if immo_subtab == "Suivi Global":
-                        with st.spinner("🏢 Analyse du suivi global..."):
-                            analyser_suivi_immo(df_immo)
-                    elif immo_subtab == "Analyse par Statut":
-                        with st.spinner("🏢 Analyse par statut..."):
-                            analyser_statuts_dossiers_immo(df_immo)
-                    elif immo_subtab == "Analyse par Groupe":
-                        with st.spinner("🏢 Analyse par groupe..."):
-                            analyser_groupes_dossiers_immo(df_immo)
+#                     if immo_subtab == "Suivi Global":
+#                         with st.spinner("🏢 Analyse du suivi global..."):
+#                             analyser_suivi_immo(df_immo)
+#                     elif immo_subtab == "Analyse par Statut":
+#                         with st.spinner("🏢 Analyse par statut..."):
+#                             analyser_statuts_dossiers_immo(df_immo)
+#                     elif immo_subtab == "Analyse par Groupe":
+#                         with st.spinner("🏢 Analyse par groupe..."):
+#                             analyser_groupes_dossiers_immo(df_immo)
 
   
-            self.render_debug_info("Immobilier")
+#             self.render_debug_info("Immobilier")
                 
 
                # =============================================================================
