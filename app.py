@@ -1554,23 +1554,23 @@ class DashboardApp:
 
 
 
-            elif selected_tab == "🏢 Immobilier":
-                st.markdown('<h2 class="sub-header">🏢 Analyse Immobilier</h2>', unsafe_allow_html=True)
+        elif selected_tab == "🏢 Immobilier":
+            st.markdown('<h2 class="sub-header">🏢 Analyse Immobilier</h2>', unsafe_allow_html=True)
                 
-                # Chargement du fichier spécifique à cette analyse
-                st.subheader("📁 Chargement des données")
-                df_immo = self.load_file(
-                    "🏠 Fichier souscriptions immobilières", 
-                    "file_immo_tab",
-                    ["xlsx", "csv"],
-                    description="Colonnes attendues: Date de création, Conseiller, Statut, Montant, Type de bien"
-                )
-            
-                if df_immo is None:
-                    df_immo = auto_load_from_s3("immo", description="souscriptions immobilières")
+            # Chargement du fichier spécifique à cette analyse
+            st.subheader("📁 Chargement des données")
+            df_immo = self.load_file(
+                   "🏠 Fichier souscriptions immobilières", 
+                   "file_immo_tab",
+                ["xlsx", "csv"],
+                   description="Colonnes attendues: Date de création, Conseiller, Statut, Montant, Type de bien"
+              )         
+              
+              if df_immo is None:
+                  df_immo = auto_load_from_s3("immo", description="souscriptions immobilières")
                 
-                # AJOUTER CETTE LIGNE
-                self.data_files['df_immo'] = df_immo
+            # AJOUTER CETTE LIGNE
+            self.data_files['df_immo'] = df_immo
                 
                 if df_immo is not None:
                     st.markdown("---")
