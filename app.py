@@ -65,7 +65,7 @@ def fetch_latest_from_s3(bucket: str, prefix: str, region_name: str) -> tuple:
 def load_file_from_s3(bucket: str, prefix: str = ""):
     """Charge automatiquement le fichier le plus récent (csv/xls/xlsx) depuis S3"""
     s3 = make_s3_client()
-    key, last_modified = find_latest_file(bucket, prefix)
+    key, last_modified = find_latest_file(s3, bucket, prefix)
     if not key:
         raise FileNotFoundError("Aucun fichier trouvé dans S3")
 
