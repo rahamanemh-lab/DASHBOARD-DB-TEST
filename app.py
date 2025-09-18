@@ -165,6 +165,98 @@ def make_immo_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
 
 # =============================================================================
 
+#S3 CONFIG
+
+# =============================================================================
+import boto3
+from io import BytesIO
+from urllib.parse import urlparse
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _get_s3_client():
+    # lit d’abord dans st.secrets, sinon variables d’env
+    region = (st.secrets.get("s3", {}) or {}).get("region") or os.getenv("AWS_DEFAULT_REGION", "eu-north-1")
+    aws_id = (st.secrets.get("s3", {}) or {}).get("aws_access_key_id") or os.getenv("AWS_ACCESS_KEY_ID")
+    aws_sk = (st.secrets.get("s3", {}) or {}).get("aws_secret_access_key") or os.getenv("AWS_SECRET_ACCESS_KEY")
+    params = {"region_name": region}
+    if aws_id and aws_sk:
+        params.update({"aws_access_key_id": aws_id, "aws_secret_access_key": aws_sk})
+    return boto3.client("s3", **params)
+
+def _s3_conf():
+    # récupère bucket + mapping des préfixes
+    s3sec = st.secrets.get("s3", {}) or {}
+    return {
+        "bucket": s3sec.get("bucket") or os.getenv("S3_BUCKET"),
+        "region": s3sec.get("region") or os.getenv("AWS_DEFAULT_REGION", "eu-north-1"),
+        "prefixes": {
+            "epargne": s3sec.get("epargne_prefix") or os.getenv("S3_EPARGNE_PREFIX", "inputs/epargne/"),
+            "immo": s3sec.get("immo_prefix") or os.getenv("S3_IMMO_PREFIX", "inputs/immo/"),
+            "rdv": s3sec.get("rdv_prefix") or os.getenv("S3_RDV_PREFIX", "inputs/rdv/"),
+            "clients": s3sec.get("clients_prefix") or os.getenv("S3_CLIENTS_PREFIX", "inputs/clients/"),
+            "entretiens_epargne": s3sec.get("entretiens_epargne_prefix") or os.getenv("S3_ENT_EP_PREFIX", "inputs/entretiens_epargne/"),
+            "entretiens_immo": s3sec.get("entretiens_immo_prefix") or os.getenv("S3_ENT_IMMO_PREFIX", "inputs/entretiens_immo/"),
+            "paiements_epargne": s3sec.get("paiements_epargne_prefix") or os.getenv("S3_PAY_EP_PREFIX", "inputs/paiements_epargne/"),
+            "paiements_immo": s3sec.get("paiements_immo_prefix") or os.getenv("S3_PAY_IMMO_PREFIX", "inputs/paiements_immo/"),
+            "analyse_2025": s3sec.get("analyse_2025_prefix") or os.getenv("S3_2025_PREFIX", "inputs/analyse_2025/"),
+        },
+        "extensions": (s3sec.get("extensions") or "xlsx,csv").split(",")
+    }
+
+@st.cache_data(ttl=120, show_spinner=False)
+def s3_latest_key(bucket: str, prefix: str, allowed_ext=("xlsx","xls","csv")) -> str | None:
+    s3 = _get_s3_client()
+    paginator = s3.get_paginator("list_objects_v2")
+    latest = None
+    latest_ts = None
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if any(key.lower().endswith("."+ext.lower()) for ext in allowed_ext):
+                ts = obj["LastModified"]
+                if latest_ts is None or ts > latest_ts:
+                    latest, latest_ts = key, ts
+    return latest
+
+@st.cache_data(ttl=120, show_spinner=False)
+def s3_read_excel_or_csv(bucket: str, key: str) -> pd.DataFrame | None:
+    s3 = _get_s3_client()
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    data = obj["Body"].read()
+    if key.lower().endswith((".xlsx",".xls")):
+        return pd.read_excel(BytesIO(data))
+    elif key.lower().endswith(".csv"):
+        # essai auto d’encodage ; ajuste si besoin
+        try:
+            return pd.read_csv(BytesIO(data))
+        except Exception:
+            return pd.read_csv(BytesIO(data), encoding="utf-8", sep=";")
+    return None
+
+def auto_load_from_s3(kind: str, description: str = "") -> pd.DataFrame | None:
+    cfg = _s3_conf()
+    bucket = cfg["bucket"]
+    if not bucket:
+        st.warning("S3 non configuré (bucket manquant).")
+        return None
+    prefix = cfg["prefixes"].get(kind)
+    if not prefix:
+        st.warning(f"Préfixe S3 manquant pour {kind}.")
+        return None
+    key = s3_latest_key(bucket, prefix, cfg["extensions"])
+    if not key:
+        st.info(f"Aucun fichier trouvé sur S3 sous `{prefix}` pour {kind}.")
+        return None
+    with st.spinner(f"📥 Chargement S3 ({description or kind})…"):
+        df = s3_read_excel_or_csv(bucket, key)
+    if df is not None:
+        st.success(f"✅ Chargé depuis S3: s3://{bucket}/{key}")
+    return df
+
+
+
+
+
 
 # =============================================================================
 
