@@ -1517,7 +1517,7 @@ class DashboardApp:
 
 
 # =============================================================================
-            if df_epargne is None:
+#           if df_epargne is None:
 #                 df_epargne = make_epargne_from_crypto(df)
 #                 if not df_epargne.empty:
 #                     st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Épargne.")
