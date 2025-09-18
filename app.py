@@ -56,7 +56,7 @@ def fetch_latest_from_s3(bucket: str, prefix: str, region_name: str) -> tuple:
         raise FileNotFoundError("Aucun fichier trouvé dans ce bucket/prefix.")
     obj = s3.get_object(Bucket=bucket, Key=key)
     content = obj["Body"].read()
-    df = load_file_from_bytes(content, key)
+    df = load_file_from_s3(content, key)
     return df, key, last_modified.astimezone().isoformat()
 
 
