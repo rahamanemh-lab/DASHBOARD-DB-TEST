@@ -1486,6 +1486,9 @@ class DashboardApp:
 
             if df_epargne is None:
                 df_epargne = auto_load_from_s3("epargne", description="souscriptions épargne")
+
+            # AJOUTER CETTE LIGNE
+            self.data_files['df_epargne'] = df_epargne
 # =============================================================================
 
 
