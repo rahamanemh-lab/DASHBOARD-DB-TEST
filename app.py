@@ -801,6 +801,7 @@ class DashboardApp:
         try:
             bucket = bucket or st.secrets["aws"]["bucket"]
             prefix = prefix or st.secrets["aws"].get("prefix", "")
+            region = st.secrets["aws"].get("region_name", "eu-north-1")
             with st.spinner("Connexion à S3 et récupération du fichier le plus récent…"):
                 df, s3_key, s3_lastmod = fetch_latest_from_s3(bucket, prefix, region_name)
             st.success(f"✅ **{label}** chargé depuis S3 : {s3_key} (LastModified: {s3_lastmod})")
