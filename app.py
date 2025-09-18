@@ -17,150 +17,151 @@ from contextlib import contextmanager
 import json
 import requests
 from typing import Optional, Dict, Any
+# # =============================================================================
+# # SECTION CRYPTO - TEST CONNEXION LIGHTSAIL
+# # =============================================================================
+# import os
+# import pandas as pd
+# import pymysql
+# import streamlit as st
 
-# =============================================================================
-# SECTION CRYPTO - TEST CONNEXION LIGHTSAIL
-# =============================================================================
-import os
-import pandas as pd
-import pymysql
-import streamlit as st
+# st.set_page_config(page_title="Crypto Lightsail (SSL)", layout="wide")
+# st.title("🔐 Connexion SSL à Lightsail MySQL")
 
-st.set_page_config(page_title="Crypto Lightsail (SSL)", layout="wide")
-st.title("🔐 Connexion SSL à Lightsail MySQL")
+# def get_db_conf():
+#     # 1) Streamlit Cloud secrets
+#     if "database" in st.secrets:
+#         cfg = st.secrets["database"]
+#         return {
+#             "host": cfg["host"],
+#             "user": cfg["user"],
+#             "password": cfg["password"],
+#             "database": cfg["dbname"],
+#             "port": int(cfg.get("port", 3306)),
+#             "ca": cfg.get("ssl_ca", None)  # chemin optionnel du CA si fourni
+#         }
+#     # 2) Fallback: env vars (local)
+#     return {
+#         "host": os.getenv("DB_HOST"),
+#         "user": os.getenv("DB_USER"),
+#         "password": os.getenv("DB_PASSWORD"),
+#         "database": os.getenv("DB_NAME", "crypto_datalake"),
+#         "port": int(os.getenv("DB_PORT", "3306")),
+#         "ca": os.getenv("DB_SSL_CA")  # ex: ./certs/rds-combined-ca-bundle.pem
+#     }
 
-def get_db_conf():
-    # 1) Streamlit Cloud secrets
-    if "database" in st.secrets:
-        cfg = st.secrets["database"]
-        return {
-            "host": cfg["host"],
-            "user": cfg["user"],
-            "password": cfg["password"],
-            "database": cfg["dbname"],
-            "port": int(cfg.get("port", 3306)),
-            "ca": cfg.get("ssl_ca", None)  # chemin optionnel du CA si fourni
-        }
-    # 2) Fallback: env vars (local)
-    return {
-        "host": os.getenv("DB_HOST"),
-        "user": os.getenv("DB_USER"),
-        "password": os.getenv("DB_PASSWORD"),
-        "database": os.getenv("DB_NAME", "crypto_datalake"),
-        "port": int(os.getenv("DB_PORT", "3306")),
-        "ca": os.getenv("DB_SSL_CA")  # ex: ./certs/rds-combined-ca-bundle.pem
-    }
+# cfg = get_db_conf()
+# if not all([cfg["host"], cfg["user"], cfg["password"], cfg["database"]]):
+#     st.error("Config manquante: host/user/password/database")
+#     st.stop()
 
-cfg = get_db_conf()
-if not all([cfg["host"], cfg["user"], cfg["password"], cfg["database"]]):
-    st.error("Config manquante: host/user/password/database")
-    st.stop()
+# # SSL kwargs: avec CA si dispo, sinon SSL rapide (sans vérification)
+# ssl_kwargs = {"ssl": {"ca": cfg["ca"]}} if cfg.get("ca") else {"ssl": {"ssl": {}}}
 
-# SSL kwargs: avec CA si dispo, sinon SSL rapide (sans vérification)
-ssl_kwargs = {"ssl": {"ca": cfg["ca"]}} if cfg.get("ca") else {"ssl": {"ssl": {}}}
-
-# Connexion + ping
-try:
-    conn = pymysql.connect(
-        host=cfg["host"],
-        user=cfg["user"],
-        password=cfg["password"],
-        database=cfg["database"],
-        port=cfg["port"],
-        charset="utf8mb4",
-        connect_timeout=10,
-        **ssl_kwargs
-    )
-    with conn.cursor() as c:
-        c.execute("SELECT NOW(), USER(), CURRENT_USER(), VERSION()")
-        now, user, cur_user, ver = c.fetchone()
-    st.success(f"✅ SSL OK — NOW={now} | USER()={user} | CURRENT_USER()={cur_user} | MySQL={ver}")
-except Exception as e:
-    st.error(f"❌ Connexion échouée : {e}")
-    st.stop()
+# # Connexion + ping
+# try:
+#     conn = pymysql.connect(
+#         host=cfg["host"],
+#         user=cfg["user"],
+#         password=cfg["password"],
+#         database=cfg["database"],
+#         port=cfg["port"],
+#         charset="utf8mb4",
+#         connect_timeout=10,
+#         **ssl_kwargs
+#     )
+#     with conn.cursor() as c:
+#         c.execute("SELECT NOW(), USER(), CURRENT_USER(), VERSION()")
+#         now, user, cur_user, ver = c.fetchone()
+#     st.success(f"✅ SSL OK — NOW={now} | USER()={user} | CURRENT_USER()={cur_user} | MySQL={ver}")
+# except Exception as e:
+#     st.error(f"❌ Connexion échouée : {e}")
+#     st.stop()
 
 
-def render_crypto_test_section():
-    # Lecture + graphe
-    df = pd.read_sql("""
-        SELECT ts_utc AS ts, asset, fiat, price
-        FROM crypto_prices
-        WHERE ts_utc >= NOW() - INTERVAL 1 DAY
-        ORDER BY ts_utc DESC
-        LIMIT 500
-    """, conn)
-    conn.close()
+# def render_crypto_test_section():
+#     # Lecture + graphe
+#     df = pd.read_sql("""
+#         SELECT ts_utc AS ts, asset, fiat, price
+#         FROM crypto_prices
+#         WHERE ts_utc >= NOW() - INTERVAL 1 DAY
+#         ORDER BY ts_utc DESC
+#         LIMIT 500
+#     """, conn)
+#     conn.close()
     
-    if df.empty:
-        st.warning("Aucune ligne dans crypto_prices (24h).")
-    else:
-        st.dataframe(df.head(20), use_container_width=True)
-        df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
-        df = df.dropna(subset=["ts","price"]).sort_values(["ts","asset"])
-        pivot = (
-            df.groupby(["ts","asset"], as_index=False)["price"].mean()
-              .pivot(index="ts", columns="asset", values="price")
-              .sort_index()
-        )
-        st.subheader("📈 Prix par asset (dernières 24h)")
-        st.line_chart(pivot)
+#     if df.empty:
+#         st.warning("Aucune ligne dans crypto_prices (24h).")
+#     else:
+#         st.dataframe(df.head(20), use_container_width=True)
+#         df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+#         df = df.dropna(subset=["ts","price"]).sort_values(["ts","asset"])
+#         pivot = (
+#             df.groupby(["ts","asset"], as_index=False)["price"].mean()
+#               .pivot(index="ts", columns="asset", values="price")
+#               .sort_index()
+#         )
+#         st.subheader("📈 Prix par asset (dernières 24h)")
+#         st.line_chart(pivot)
 
 
 
-# =============================================================================
+# # =============================================================================
 
-# =============================================================================
-def make_epargne_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
-    """
-    Map crypto -> schéma ÉPARGNE attendu par le dashboard.
-    Colonnes produites : 
-      - Date de souscription (datetime)
-      - Montant (float)
-      - Montant du placement (float)  # utile pour 'Retard cumulé'
-      - Conseiller (str)
-      - Produit (str)
-      - Statut/Étape (str)
-    """
-    if df_crypto is None or df_crypto.empty:
-        return pd.DataFrame(columns=[
-            "Date de souscription","Montant","Montant du placement","Conseiller","Produit","Statut/Étape"
-        ])
-    df = df_crypto.copy()
-    df["Date de souscription"] = pd.to_datetime(df["ts"], errors="coerce")  # ts vient de ts_utc AS ts
-    df["Montant"] = pd.to_numeric(df["price"], errors="coerce")
-    df["Montant du placement"] = df["Montant"]  # pour la section 'Retard cumulé' :contentReference[oaicite:3]{index=3}
-    df["Conseiller"] = "Demo (Lightsail)"
-    df["Produit"] = df["asset"].astype(str).str.upper()
-    df["Statut/Étape"] = "Validé"
-    out = df[[
-        "Date de souscription","Montant","Montant du placement","Conseiller","Produit","Statut/Étape"
-    ]].dropna(subset=["Date de souscription","Montant"])
-    return out
+# # =============================================================================
+# def make_epargne_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Map crypto -> schéma ÉPARGNE attendu par le dashboard.
+#     Colonnes produites : 
+#       - Date de souscription (datetime)
+#       - Montant (float)
+#       - Montant du placement (float)  # utile pour 'Retard cumulé'
+#       - Conseiller (str)
+#       - Produit (str)
+#       - Statut/Étape (str)
+#     """
+#     if df_crypto is None or df_crypto.empty:
+#         return pd.DataFrame(columns=[
+#             "Date de souscription","Montant","Montant du placement","Conseiller","Produit","Statut/Étape"
+#         ])
+#     df = df_crypto.copy()
+#     df["Date de souscription"] = pd.to_datetime(df["ts"], errors="coerce")  # ts vient de ts_utc AS ts
+#     df["Montant"] = pd.to_numeric(df["price"], errors="coerce")
+#     df["Montant du placement"] = df["Montant"]  # pour la section 'Retard cumulé' :contentReference[oaicite:3]{index=3}
+#     df["Conseiller"] = "Demo (Lightsail)"
+#     df["Produit"] = df["asset"].astype(str).str.upper()
+#     df["Statut/Étape"] = "Validé"
+#     out = df[[
+#         "Date de souscription","Montant","Montant du placement","Conseiller","Produit","Statut/Étape"
+#     ]].dropna(subset=["Date de souscription","Montant"])
+#     return out
 
 
-def make_immo_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
-    """
-    Map crypto -> schéma IMMOBILIER attendu par le dashboard.
-    Colonnes produites :
-      - Date de création (datetime)
-      - Conseiller (str)
-      - Statut (str)
-      - Montant (float)
-      - Type de bien (str)
-    """
-    if df_crypto is None or df_crypto.empty:
-        return pd.DataFrame(columns=[
-            "Date de création","Conseiller","Statut","Montant","Type de bien"
-        ])
-    df = df_crypto.copy()
-    df["Date de création"] = pd.to_datetime(df["ts"], errors="coerce")
-    df["Montant"] = pd.to_numeric(df["price"], errors="coerce")
-    df["Conseiller"] = "Demo (Lightsail)"
-    df["Statut"] = "En cours"
-    # on “réutilise” asset comme pseudo-type
-    df["Type de bien"] = df["asset"].astype(str).str.upper()
-    out = df[["Date de création","Conseiller","Statut","Montant","Type de bien"]].dropna(subset=["Date de création","Montant"])
-    return out
+# def make_immo_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Map crypto -> schéma IMMOBILIER attendu par le dashboard.
+#     Colonnes produites :
+#       - Date de création (datetime)
+#       - Conseiller (str)
+#       - Statut (str)
+#       - Montant (float)
+#       - Type de bien (str)
+#     """
+#     if df_crypto is None or df_crypto.empty:
+#         return pd.DataFrame(columns=[
+#             "Date de création","Conseiller","Statut","Montant","Type de bien"
+#         ])
+#     df = df_crypto.copy()
+#     df["Date de création"] = pd.to_datetime(df["ts"], errors="coerce")
+#     df["Montant"] = pd.to_numeric(df["price"], errors="coerce")
+#     df["Conseiller"] = "Demo (Lightsail)"
+#     df["Statut"] = "En cours"
+#     # on “réutilise” asset comme pseudo-type
+#     df["Type de bien"] = df["asset"].astype(str).str.upper()
+#     out = df[["Date de création","Conseiller","Statut","Montant","Type de bien"]].dropna(subset=["Date de création","Montant"])
+#     return out
+
+
 
 
 # =============================================================================
@@ -4864,5 +4865,5 @@ def main():
 
 
 if __name__ == "__main__":
-    render_crypto_test_section()
+    #render_crypto_test_section()
     main()
