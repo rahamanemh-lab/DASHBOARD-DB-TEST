@@ -21,7 +21,7 @@ from typing import Optional, Dict, Any
 # =============================================================================
 
 import boto3
-import io
+import io, gzip
 
 def make_s3_client(region: str = None):
     aws_conf = st.secrets.get("aws", {})
@@ -62,34 +62,40 @@ def fetch_latest_from_s3(bucket: str, prefix: str, region_name: str) -> tuple:
 
 
 
-def load_file_from_s3(bucket: str, prefix: str = ""):
-    """Charge automatiquement le fichier le plus récent (csv/xls/xlsx) depuis S3"""
-    s3 = make_s3_client()
-    key, last_modified = find_latest_file(s3, bucket, prefix)
-    if not key:
-        raise FileNotFoundError("Aucun fichier trouvé dans S3")
-
-    obj = s3.get_object(Bucket=bucket, Key=key)
-    content = obj["Body"].read()
-
-    ext = os.path.splitext(key)[1].lower()
-    if ext in [".xlsx", ".xls"]:
-        df = pd.read_excel(io.BytesIO(content))
-    elif ext == ".csv":
+def _decode_bytes(b: bytes) -> str:
+    # Essaie UTF-8, sinon fallback latin1 puis cp1252
+    for enc in ("utf-8", "latin1", "cp1252"):
         try:
-            df = pd.read_csv(io.BytesIO(content), encoding="utf-8", sep=None, engine="python")
+            return b.decode(enc)
         except UnicodeDecodeError:
-            df = pd.read_csv(io.BytesIO(content), encoding="latin1", sep=None, engine="python")
-    
-    elif ext in [".gz", ".gzip"]:  # CSV.gz exporté par Lambda
-        return pd.read_csv(io.BytesIO(content), compression="gzip", encoding="utf-8")
-    elif ext == ".parquet":
-        return pd.read_parquet(io.BytesIO(content))
-    
-    else:
-        raise ValueError(f"Format non supporté: {ext}")
+            continue
+    # dernier recours: remplacements
+    return b.decode("utf-8", errors="replace")
 
-    return df, key, last_modified
+def load_file_from_s3(content: bytes, key: str) -> pd.DataFrame:
+    """
+    Gère: .xlsx, .xls, .csv, .csv.gz, .parquet
+    Décodage texte explicite pour CSV/CSV.GZ afin d’éviter
+    'cannot use a string pattern on a bytes-like object'.
+    """
+    ext = os.path.splitext(key)[1].lower()
+
+    if ext in (".xlsx", ".xls"):
+        return pd.read_excel(io.BytesIO(content))
+
+    if ext == ".parquet":
+        return pd.read_parquet(io.BytesIO(content))  # nécessite pyarrow
+
+    if ext == ".csv":
+        text = _decode_bytes(content)
+        return pd.read_csv(io.StringIO(text), sep=None, engine="python")
+
+    if ext in (".gz", ".gzip"):  # CSV.gz
+        decompressed = gzip.decompress(content)
+        text = _decode_bytes(decompressed)
+        return pd.read_csv(io.StringIO(text), sep=None, engine="python")
+
+    raise ValueError(f"Format non supporté: {ext} (clé: {key})")
 # =============================================================================
 
 
