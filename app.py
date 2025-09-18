@@ -43,12 +43,10 @@ def find_latest_file(s3, bucket: str, prefix: str):
                 latest_key, latest_dt = obj["Key"], lm
     return (latest_key, latest_dt) if latest_key else (None, None)
 
+
 @st.cache_data(show_spinner=False)
-def fetch_latest_from_s3(bucket: str, prefix: str, region: str, refresh_token: str = "", _schema_version: str = "v3") -> tuple:
-    """
-    Télécharge le fichier le plus récent et renvoie EXACTEMENT:
-      (df, key:str, last_modified_iso:str)
-    """
+@st.cache_data(show_spinner=False, ttl=300)  # Optionnel: auto-refresh toutes les 5 min
+def fetch_latest_from_s3(bucket: str, prefix: str, region: str) -> tuple:
     s3 = make_s3_client(region)
     key, last_modified = find_latest_file(s3, bucket, prefix)
     if not key:
@@ -57,6 +55,8 @@ def fetch_latest_from_s3(bucket: str, prefix: str, region: str, refresh_token: s
     content = obj["Body"].read()
     df = load_file_from_bytes(content, key)
     return df, key, last_modified.astimezone().isoformat()
+
+
 
 
 def load_file_from_s3(bucket: str, prefix: str = ""):
@@ -802,7 +802,7 @@ class DashboardApp:
             bucket = bucket or st.secrets["aws"]["bucket"]
             prefix = prefix or st.secrets["aws"].get("prefix", "")
             with st.spinner("Connexion à S3 et récupération du fichier le plus récent…"):
-                df, s3_key, s3_lastmod = load_file_from_s3(bucket, prefix)
+                df, s3_key, s3_lastmod = fetch_latest_from_s3(bucket, prefix, region_name)
             st.success(f"✅ **{label}** chargé depuis S3 : {s3_key} (LastModified: {s3_lastmod})")
             source = f"S3: {s3_key}"
         except Exception as e:
