@@ -1513,7 +1513,7 @@ class DashboardApp:
                     with st.spinner("📊 Analyse du pipe de collecte..."):
                         analyser_pipe_collecte_epargne(df_epargne)
             
-            self.render_debug_info("Épargne")
+                self.render_debug_info("Épargne")
 
 
 # =============================================================================
