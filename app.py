@@ -17,246 +17,55 @@ from contextlib import contextmanager
 import json
 import requests
 from typing import Optional, Dict, Any
-# # =============================================================================
-# # SECTION CRYPTO - TEST CONNEXION LIGHTSAIL
-# # =============================================================================
-# import os
-# import pandas as pd
-# import pymysql
-# import streamlit as st
-
-# st.set_page_config(page_title="Crypto Lightsail (SSL)", layout="wide")
-# st.title("🔐 Connexion SSL à Lightsail MySQL")
-
-# def get_db_conf():
-#     # 1) Streamlit Cloud secrets
-#     if "database" in st.secrets:
-#         cfg = st.secrets["database"]
-#         return {
-#             "host": cfg["host"],
-#             "user": cfg["user"],
-#             "password": cfg["password"],
-#             "database": cfg["dbname"],
-#             "port": int(cfg.get("port", 3306)),
-#             "ca": cfg.get("ssl_ca", None)  # chemin optionnel du CA si fourni
-#         }
-#     # 2) Fallback: env vars (local)
-#     return {
-#         "host": os.getenv("DB_HOST"),
-#         "user": os.getenv("DB_USER"),
-#         "password": os.getenv("DB_PASSWORD"),
-#         "database": os.getenv("DB_NAME", "crypto_datalake"),
-#         "port": int(os.getenv("DB_PORT", "3306")),
-#         "ca": os.getenv("DB_SSL_CA")  # ex: ./certs/rds-combined-ca-bundle.pem
-#     }
-
-# cfg = get_db_conf()
-# if not all([cfg["host"], cfg["user"], cfg["password"], cfg["database"]]):
-#     st.error("Config manquante: host/user/password/database")
-#     st.stop()
-
-# # SSL kwargs: avec CA si dispo, sinon SSL rapide (sans vérification)
-# ssl_kwargs = {"ssl": {"ca": cfg["ca"]}} if cfg.get("ca") else {"ssl": {"ssl": {}}}
-
-# # Connexion + ping
-# try:
-#     conn = pymysql.connect(
-#         host=cfg["host"],
-#         user=cfg["user"],
-#         password=cfg["password"],
-#         database=cfg["database"],
-#         port=cfg["port"],
-#         charset="utf8mb4",
-#         connect_timeout=10,
-#         **ssl_kwargs
-#     )
-#     with conn.cursor() as c:
-#         c.execute("SELECT NOW(), USER(), CURRENT_USER(), VERSION()")
-#         now, user, cur_user, ver = c.fetchone()
-#     st.success(f"✅ SSL OK — NOW={now} | USER()={user} | CURRENT_USER()={cur_user} | MySQL={ver}")
-# except Exception as e:
-#     st.error(f"❌ Connexion échouée : {e}")
-#     st.stop()
-
-
-# def render_crypto_test_section():
-#     # Lecture + graphe
-#     df = pd.read_sql("""
-#         SELECT ts_utc AS ts, asset, fiat, price
-#         FROM crypto_prices
-#         WHERE ts_utc >= NOW() - INTERVAL 1 DAY
-#         ORDER BY ts_utc DESC
-#         LIMIT 500
-#     """, conn)
-#     conn.close()
-    
-#     if df.empty:
-#         st.warning("Aucune ligne dans crypto_prices (24h).")
-#     else:
-#         st.dataframe(df.head(20), use_container_width=True)
-#         df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
-#         df = df.dropna(subset=["ts","price"]).sort_values(["ts","asset"])
-#         pivot = (
-#             df.groupby(["ts","asset"], as_index=False)["price"].mean()
-#               .pivot(index="ts", columns="asset", values="price")
-#               .sort_index()
-#         )
-#         st.subheader("📈 Prix par asset (dernières 24h)")
-#         st.line_chart(pivot)
-
-
-
-# # =============================================================================
-
-# # =============================================================================
-# def make_epargne_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
-#     """
-#     Map crypto -> schéma ÉPARGNE attendu par le dashboard.
-#     Colonnes produites : 
-#       - Date de souscription (datetime)
-#       - Montant (float)
-#       - Montant du placement (float)  # utile pour 'Retard cumulé'
-#       - Conseiller (str)
-#       - Produit (str)
-#       - Statut/Étape (str)
-#     """
-#     if df_crypto is None or df_crypto.empty:
-#         return pd.DataFrame(columns=[
-#             "Date de souscription","Montant","Montant du placement","Conseiller","Produit","Statut/Étape"
-#         ])
-#     df = df_crypto.copy()
-#     df["Date de souscription"] = pd.to_datetime(df["ts"], errors="coerce")  # ts vient de ts_utc AS ts
-#     df["Montant"] = pd.to_numeric(df["price"], errors="coerce")
-#     df["Montant du placement"] = df["Montant"]  # pour la section 'Retard cumulé' :contentReference[oaicite:3]{index=3}
-#     df["Conseiller"] = "Demo (Lightsail)"
-#     df["Produit"] = df["asset"].astype(str).str.upper()
-#     df["Statut/Étape"] = "Validé"
-#     out = df[[
-#         "Date de souscription","Montant","Montant du placement","Conseiller","Produit","Statut/Étape"
-#     ]].dropna(subset=["Date de souscription","Montant"])
-#     return out
-
-
-# def make_immo_from_crypto(df_crypto: pd.DataFrame) -> pd.DataFrame:
-#     """
-#     Map crypto -> schéma IMMOBILIER attendu par le dashboard.
-#     Colonnes produites :
-#       - Date de création (datetime)
-#       - Conseiller (str)
-#       - Statut (str)
-#       - Montant (float)
-#       - Type de bien (str)
-#     """
-#     if df_crypto is None or df_crypto.empty:
-#         return pd.DataFrame(columns=[
-#             "Date de création","Conseiller","Statut","Montant","Type de bien"
-#         ])
-#     df = df_crypto.copy()
-#     df["Date de création"] = pd.to_datetime(df["ts"], errors="coerce")
-#     df["Montant"] = pd.to_numeric(df["price"], errors="coerce")
-#     df["Conseiller"] = "Demo (Lightsail)"
-#     df["Statut"] = "En cours"
-#     # on “réutilise” asset comme pseudo-type
-#     df["Type de bien"] = df["asset"].astype(str).str.upper()
-#     out = df[["Date de création","Conseiller","Statut","Montant","Type de bien"]].dropna(subset=["Date de création","Montant"])
-#     return out
-
-
-
 
 # =============================================================================
 
-#S3 CONFIG
-
-# =============================================================================
 import boto3
-from io import BytesIO
-from urllib.parse import urlparse
+import io
 
-@st.cache_resource(ttl=300, show_spinner=False)
-def _get_s3_client():
-    # lit d’abord dans st.secrets, sinon variables d’env
-    region = (st.secrets.get("s3", {}) or {}).get("region") or os.getenv("AWS_DEFAULT_REGION", "eu-north-1")
-    aws_id = (st.secrets.get("s3", {}) or {}).get("aws_access_key_id") or os.getenv("AWS_ACCESS_KEY_ID")
-    aws_sk = (st.secrets.get("s3", {}) or {}).get("aws_secret_access_key") or os.getenv("AWS_SECRET_ACCESS_KEY")
-    params = {"region_name": region}
-    if aws_id and aws_sk:
-        params.update({"aws_access_key_id": aws_id, "aws_secret_access_key": aws_sk})
-    return boto3.client("s3", **params)
+def make_s3_client():
+    aws_conf = st.secrets.get("aws", {})
+    return boto3.client(
+        "s3",
+        region_name=aws_conf.get("region_name", "eu-north-1"),
+        aws_access_key_id=aws_conf.get("aws_access_key_id"),
+        aws_secret_access_key=aws_conf.get("aws_secret_access_key"),
+    )
 
-def _s3_conf():
-    # récupère bucket + mapping des préfixes
-    s3sec = st.secrets.get("s3", {}) or {}
-    return {
-        "bucket": s3sec.get("bucket") or os.getenv("S3_BUCKET"),
-        "region": s3sec.get("region") or os.getenv("AWS_DEFAULT_REGION", "eu-north-1"),
-        "prefixes": {
-            "epargne": s3sec.get("epargne_prefix") or os.getenv("S3_EPARGNE_PREFIX", "inputs/epargne/"),
-            "immo": s3sec.get("immo_prefix") or os.getenv("S3_IMMO_PREFIX", "inputs/immo/"),
-            "rdv": s3sec.get("rdv_prefix") or os.getenv("S3_RDV_PREFIX", "inputs/rdv/"),
-            "clients": s3sec.get("clients_prefix") or os.getenv("S3_CLIENTS_PREFIX", "inputs/clients/"),
-            "entretiens_epargne": s3sec.get("entretiens_epargne_prefix") or os.getenv("S3_ENT_EP_PREFIX", "inputs/entretiens_epargne/"),
-            "entretiens_immo": s3sec.get("entretiens_immo_prefix") or os.getenv("S3_ENT_IMMO_PREFIX", "inputs/entretiens_immo/"),
-            "paiements_epargne": s3sec.get("paiements_epargne_prefix") or os.getenv("S3_PAY_EP_PREFIX", "inputs/paiements_epargne/"),
-            "paiements_immo": s3sec.get("paiements_immo_prefix") or os.getenv("S3_PAY_IMMO_PREFIX", "inputs/paiements_immo/"),
-            "analyse_2025": s3sec.get("analyse_2025_prefix") or os.getenv("S3_2025_PREFIX", "inputs/analyse_2025/"),
-        },
-        "extensions": (s3sec.get("extensions") or "xlsx,csv").split(",")
-    }
-
-@st.cache_data(ttl=120, show_spinner=False, hash_funcs={"botocore.client.S3": lambda _: None})
-def s3_latest_key(bucket: str, prefix: str, allowed_ext=("xlsx","xls","csv")) -> str | None:
-    s3 = _get_s3_client()
+def find_latest_file(bucket: str, prefix: str = ""):
+    s3 = make_s3_client()
     paginator = s3.get_paginator("list_objects_v2")
-    latest = None
-    latest_ts = None
+    latest_key, latest_dt = None, None
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for obj in page.get("Contents", []):
-            key = obj["Key"]
-            if any(key.lower().endswith("."+ext.lower()) for ext in allowed_ext):
-                ts = obj["LastModified"]
-                if latest_ts is None or ts > latest_ts:
-                    latest, latest_ts = key, ts
-    return latest
+            lm = obj["LastModified"]
+            if latest_dt is None or lm > latest_dt:
+                latest_key, latest_dt = obj["Key"], lm
+    return latest_key, latest_dt
 
-@st.cache_data(ttl=120, show_spinner=False, hash_funcs={"botocore.client.S3": lambda _: None})
-def s3_read_excel_or_csv(bucket: str, key: str) -> pd.DataFrame | None:
-    s3 = _get_s3_client()
-    obj = s3.get_object(Bucket=bucket, Key=key)
-    data = obj["Body"].read()
-    if key.lower().endswith((".xlsx",".xls")):
-        return pd.read_excel(BytesIO(data))
-    elif key.lower().endswith(".csv"):
-        # essai auto d'encodage ; ajuste si besoin
-        try:
-            return pd.read_csv(BytesIO(data))
-        except Exception:
-            return pd.read_csv(BytesIO(data), encoding="utf-8", sep=";")
-    return None
-
-def auto_load_from_s3(kind: str, description: str = "") -> pd.DataFrame | None:
-    cfg = _s3_conf()
-    bucket = cfg["bucket"]
-    if not bucket:
-        st.warning("S3 non configuré (bucket manquant).")
-        return None
-    prefix = cfg["prefixes"].get(kind)
-    if not prefix:
-        st.warning(f"Préfixe S3 manquant pour {kind}.")
-        return None
-    key = s3_latest_key(bucket, prefix, cfg["extensions"])
+def load_file_from_s3(bucket: str, prefix: str = ""):
+    """Charge automatiquement le fichier le plus récent (csv/xls/xlsx) depuis S3"""
+    s3 = make_s3_client()
+    key, last_modified = find_latest_file(bucket, prefix)
     if not key:
-        st.info(f"Aucun fichier trouvé sur S3 sous `{prefix}` pour {kind}.")
-        return None
-    with st.spinner(f"📥 Chargement S3 ({description or kind})…"):
-        df = s3_read_excel_or_csv(bucket, key)
-    if df is not None:
-        st.success(f"✅ Chargé depuis S3: s3://{bucket}/{key}")
-    return df
+        raise FileNotFoundError("Aucun fichier trouvé dans S3")
 
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    content = obj["Body"].read()
 
+    ext = os.path.splitext(key)[1].lower()
+    if ext in [".xlsx", ".xls"]:
+        df = pd.read_excel(io.BytesIO(content))
+    elif ext == ".csv":
+        try:
+            df = pd.read_csv(io.BytesIO(content), encoding="utf-8", sep=None, engine="python")
+        except UnicodeDecodeError:
+            df = pd.read_csv(io.BytesIO(content), encoding="latin1", sep=None, engine="python")
+    else:
+        raise ValueError(f"Format non supporté: {ext}")
 
-
+    return df, key, last_modified
+# =============================================================================
 
 
 # =============================================================================
@@ -958,73 +767,72 @@ class DashboardApp:
         
         return df
     
-    def load_file(self, label, key, formats, process_entretiens=False, type_entretien=None, description=None):
-        """Chargement d'un fichier avec traitement spécifique et mise en cache"""
-        # Afficher la description si fournie
+    def load_file(self, label, key, formats, process_entretiens=False, type_entretien=None, description=None, bucket=None, prefix=""):
+    """Charge d'abord depuis S3 (dernier fichier récent), puis permet override par upload local"""
         if description:
             st.caption(f"ℹ️ {description}")
         
-        # Diagnostic de la configuration de taille
+        df = None
+        source = None
+
+        # --- 1) Charger automatiquement depuis S3 ---
         try:
-            from streamlit.runtime.config import get_option
-            max_size = get_option("server.maxUploadSize")
-            st.caption(f"ℹ️ Taille max autorisée: {max_size}MB")
-        except:
-            st.caption("ℹ️ Configuration par défaut")
-            
-        file = st.file_uploader(label, type=formats, key=key)
+            bucket = bucket or st.secrets["aws"]["bucket"]
+            prefix = prefix or st.secrets["aws"].get("prefix", "")
+            with st.spinner("Connexion à S3 et récupération du fichier le plus récent…"):
+                df, s3_key, s3_lastmod = load_file_from_s3(bucket, prefix)
+            st.success(f"✅ **{label}** chargé depuis S3 : {s3_key} (LastModified: {s3_lastmod})")
+            source = f"S3: {s3_key}"
+        except Exception as e:
+            st.warning(f"⚠️ Impossible de charger depuis S3 : {e}")
+
+        # --- 2) Option de chargement manuel (écrase S3 si utilisé) ---
+        file = st.file_uploader(label + " (optionnel, écrase S3)", type=formats, key=key)
         
         if file is not None:
             try:
-                with st.spinner(f"Chargement de {label.lower()}..."):
-                    # Use cached processing if performance mode is enabled
-                    if self.performance_mode:
-                        df = DashboardApp._process_uploaded_file(
-                            file.getvalue(), 
-                            file.name, 
-                            process_entretiens=process_entretiens, 
-                            type_entretien=type_entretien
-                        )
-                    else:
-                        # Direct processing without caching for lighter memory usage
-                        df = read_excel_robust(file)
-                        
-                        if df is not None and process_entretiens and type_entretien:
-                            # Renommer la colonne "Date de création" en "Date" si elle existe
-                            if "Date de création" in df.columns:
-                                df = df.rename(columns={"Date de création": "Date"})
-                            # Ajouter une colonne Type
-                            df["Type"] = type_entretien
-                    
-                    if df is not None:
-                        # Affichage amélioré du succès
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            st.success(f"✅ **{label}** chargé avec succès")
-                        with col2:
-                            st.metric("Lignes", f"{len(df):,}")
-                        
-                        # Afficher un aperçu des colonnes avec un toggle
-                        if st.checkbox("🔍 Voir les colonnes détectées", key=f"cols_{key}"):
-                            cols_preview = list(df.columns)[:10]  # Première 10 colonnes
-                            if len(df.columns) > 10:
-                                cols_preview.append(f"... et {len(df.columns) - 10} autres")
-                            st.write("📋 **Colonnes détectées:**")
-                            for col in cols_preview:
-                                st.write(f"• {col}")
-                        
-                        self.logger.info(f"Fichier chargé: {label} - {len(df)} lignes")
-                        return df
-                    else:
-                        st.error(f"❌ Erreur lors du chargement de {label.lower()}")
-                        self.logger.error(f"Erreur chargement: {label}")
-                        return None
+                with st.spinner(f"Chargement local de {label.lower()}..."):
+                    if file.name.endswith((".xlsx", ".xls")):
+                        df = pd.read_excel(file)
+                    elif file.name.endswith(".csv"):
+                        try:
+                            df = pd.read_csv(file, encoding="utf-8", sep=None, engine="python")
+                        except UnicodeDecodeError:
+                            df = pd.read_csv(file, encoding="latin1", sep=None, engine="python")
+
+                    if df is not None and process_entretiens and type_entretien:
+                        if "Date de création" in df.columns:
+                            df = df.rename(columns={"Date de création": "Date"})
+                        df["Type"] = type_entretien
+
+                    st.success(f"✅ **{label}** chargé en local : {file.name}")
+                    source = f"Upload local: {file.name}"
             except Exception as e:
-                st.error(f"❌ **Erreur:** {str(e)}")
-                self.logger.error(f"Exception lors du chargement {label}: {e}")
+                st.error(f"❌ Erreur lors du chargement local : {e}")
                 return None
-        
-        return None
+
+        # --- 3) Résumé / preview ---
+        if df is not None:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.info(f"📂 Source utilisée : {source}")
+            with col2:
+                st.metric("Lignes", f"{len(df):,}")
+            
+            if st.checkbox("🔍 Voir les colonnes détectées", key=f"cols_{key}"):
+                cols_preview = list(df.columns)[:10]
+                if len(df.columns) > 10:
+                    cols_preview.append(f"... et {len(df.columns) - 10} autres")
+                st.write("📋 **Colonnes détectées:**")
+                for col in cols_preview:
+                    st.write(f"• {col}")
+            
+            self.logger.info(f"Fichier chargé: {source} - {len(df)} lignes")
+            return df
+
+    st.error(f"❌ Aucun fichier chargé pour {label}")
+    return None
+
     
     def process_entretiens_file(self, df, type_entretien):
         """Traitement spécifique des fichiers d'entretiens"""
@@ -1482,15 +1290,6 @@ class DashboardApp:
             )
 
 
-# =============================================================================
-
-            if df_epargne is None:
-                df_epargne = auto_load_from_s3("epargne", description="souscriptions épargne")
-
-            # AJOUTER CETTE LIGNE
-            self.data_files['df_epargne'] = df_epargne
-# =============================================================================
-
 
             if df_epargne is not None:
                 st.markdown("---")
@@ -1519,38 +1318,6 @@ class DashboardApp:
             
                 self.render_debug_info("Épargne")
 
-
-# =============================================================================
-#           if df_epargne is None:
-#                 df_epargne = make_epargne_from_crypto(df)
-#                 if not df_epargne.empty:
-#                     st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Épargne.")
-#                     st.markdown("---")
-                
-#                     # Créer des sous-onglets pour l'analyse épargne
-#                     epargne_subtab = st.selectbox(
-#                         "📊 Type d'analyse épargne:",
-#                         ["Performance Globale", "Performance par Conseiller", "Analyse par Groupe", "Pipe de Collecte"],
-#                         key="epargne_subtab"
-#                     )
-                    
-#                     st.markdown("---")
-                    
-#                     if epargne_subtab == "Performance Globale":
-#                         with st.spinner("📊 Analyse de la performance globale..."):
-#                             analyser_souscriptions_epargne(df_epargne)
-#                     elif epargne_subtab == "Performance par Conseiller":
-#                         with st.spinner("📊 Analyse par conseiller..."):
-#                             analyser_performance_conseillers_epargne(df_epargne)
-#                     elif epargne_subtab == "Analyse par Groupe":
-#                         with st.spinner("📊 Analyse par groupe..."):
-#                             analyser_groupes_epargne(df_epargne)
-#                     elif epargne_subtab == "Pipe de Collecte":
-#                         with st.spinner("📊 Analyse du pipe de collecte..."):
-#                             analyser_pipe_collecte_epargne(df_epargne)
-                
-#                 self.render_debug_info("Épargne")
-                # =============================================================================
 
 
 
@@ -1602,37 +1369,7 @@ class DashboardApp:
                         analyser_groupes_dossiers_immo(df_immo)
             
             self.render_debug_info("Immobilier")
-                # =============================================================================
-#             if df_immo is None:
-#                 df_immo = make_immo_from_crypto(df)
-#                 if not df_immo.empty:
-#                     st.info("🧪 Mode test : données crypto (Lightsail) mappées vers Immobilier.")
-#                     st.markdown("---")
-                
-#                     # Créer des sous-onglets pour l'analyse immobilière
-#                     immo_subtab = st.selectbox(
-#                         "🏢 Type d'analyse immobilier:",
-#                         ["Suivi Global", "Analyse par Statut", "Analyse par Groupe"],
-#                         key="immo_subtab"
-#                         )
-                        
-#                     st.markdown("---")
-                        
-#                     if immo_subtab == "Suivi Global":
-#                         with st.spinner("🏢 Analyse du suivi global..."):
-#                             analyser_suivi_immo(df_immo)
-#                     elif immo_subtab == "Analyse par Statut":
-#                         with st.spinner("🏢 Analyse par statut..."):
-#                             analyser_statuts_dossiers_immo(df_immo)
-#                     elif immo_subtab == "Analyse par Groupe":
-#                         with st.spinner("🏢 Analyse par groupe..."):
-#                             analyser_groupes_dossiers_immo(df_immo)
 
-  
-#             self.render_debug_info("Immobilier")
-                
-
-               # =============================================================================
 
         
         elif selected_tab == "📞 Entretiens":
@@ -4872,5 +4609,4 @@ def main():
 
 
 if __name__ == "__main__":
-    #render_crypto_test_section()
     main()
