@@ -768,7 +768,7 @@ class DashboardApp:
         return df
     
     def load_file(self, label, key, formats, process_entretiens=False, type_entretien=None, description=None, bucket=None, prefix=""):
-    """Charge d'abord depuis S3 (dernier fichier récent), puis permet override par upload local"""
+        """Charge d'abord depuis S3 (dernier fichier récent), puis permet override par upload local"""
         if description:
             st.caption(f"ℹ️ {description}")
         
