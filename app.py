@@ -1339,9 +1339,9 @@ class DashboardApp:
             # AJOUTER CETTE LIGNE
             self.data_files['df_immo'] = df_immo
                 
-                if df_immo is not None:
-                    st.markdown("---")
-                    # ... reste du code d'analyse ...
+            if df_immo is not None:
+                st.markdown("---")
+                # ... reste du code d'analyse ...
                 
                 self.render_debug_info("Immobilier")
 
