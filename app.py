@@ -61,6 +61,12 @@ def load_file_from_s3(bucket: str, prefix: str = ""):
             df = pd.read_csv(io.BytesIO(content), encoding="utf-8", sep=None, engine="python")
         except UnicodeDecodeError:
             df = pd.read_csv(io.BytesIO(content), encoding="latin1", sep=None, engine="python")
+    
+    elif ext in [".gz", ".gzip"]:  # CSV.gz exporté par Lambda
+        return pd.read_csv(io.BytesIO(content), compression="gzip", encoding="utf-8")
+    elif ext == ".parquet":
+        return pd.read_parquet(io.BytesIO(content))
+    
     else:
         raise ValueError(f"Format non supporté: {ext}")
 
