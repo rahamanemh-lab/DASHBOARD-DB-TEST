@@ -1550,17 +1550,17 @@ class DashboardApp:
 
 
 
-        elif selected_tab == "🏢 Immobilier":
-            st.markdown('<h2 class="sub-header">🏢 Analyse Immobilier</h2>', unsafe_allow_html=True)
-            
-            # Chargement du fichier spécifique à cette analyse
-            st.subheader("📁 Chargement des données")
-            df_immo = self.load_file(
-                "🏠 Fichier souscriptions immobilières", 
-                "file_immo_tab",
-                ["xlsx", "csv"],
-                description="Colonnes attendues: Date de création, Conseiller, Statut, Montant, Type de bien"
-            )
+            elif selected_tab == "🏢 Immobilier":
+                st.markdown('<h2 class="sub-header">🏢 Analyse Immobilier</h2>', unsafe_allow_html=True)
+                
+                # Chargement du fichier spécifique à cette analyse
+                st.subheader("📁 Chargement des données")
+                df_immo = self.load_file(
+                    "🏠 Fichier souscriptions immobilières", 
+                    "file_immo_tab",
+                    ["xlsx", "csv"],
+                    description="Colonnes attendues: Date de création, Conseiller, Statut, Montant, Type de bien"
+                )
 
 # =============================================================================
 
