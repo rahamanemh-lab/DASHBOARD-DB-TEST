@@ -46,8 +46,8 @@ def find_latest_file(s3, bucket: str, prefix: str):
 
 @st.cache_data(show_spinner=False)
 @st.cache_data(show_spinner=False, ttl=300)  # Optionnel: auto-refresh toutes les 5 min
-def fetch_latest_from_s3(bucket: str, prefix: str, region: str) -> tuple:
-    s3 = make_s3_client(region)
+def fetch_latest_from_s3(bucket: str, prefix: str, region_name: str) -> tuple:
+    s3 = make_s3_client(region_name)
     key, last_modified = find_latest_file(s3, bucket, prefix)
     if not key:
         raise FileNotFoundError("Aucun fichier trouvé dans ce bucket/prefix.")
