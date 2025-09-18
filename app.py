@@ -32,16 +32,32 @@ def make_s3_client():
         aws_secret_access_key=aws_conf.get("aws_secret_access_key"),
     )
 
-def find_latest_file(bucket: str, prefix: str = ""):
-    s3 = make_s3_client()
+def find_latest_file(s3, bucket: str, prefix: str):
+    """Retourne (key, last_modified) du fichier le plus récent sous Prefix."""
     paginator = s3.get_paginator("list_objects_v2")
     latest_key, latest_dt = None, None
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix or ""):
         for obj in page.get("Contents", []):
             lm = obj["LastModified"]
             if latest_dt is None or lm > latest_dt:
                 latest_key, latest_dt = obj["Key"], lm
-    return latest_key, latest_dt
+    return (latest_key, latest_dt) if latest_key else (None, None)
+
+@st.cache_data(show_spinner=False)
+def fetch_latest_from_s3(bucket: str, prefix: str, region: str, refresh_token: str = "", _schema_version: str = "v3") -> tuple:
+    """
+    Télécharge le fichier le plus récent et renvoie EXACTEMENT:
+      (df, key:str, last_modified_iso:str)
+    """
+    s3 = make_s3_client(region)
+    key, last_modified = find_latest_file(s3, bucket, prefix)
+    if not key:
+        raise FileNotFoundError("Aucun fichier trouvé dans ce bucket/prefix.")
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    content = obj["Body"].read()
+    df = load_file_from_bytes(content, key)
+    return df, key, last_modified.astimezone().isoformat()
+
 
 def load_file_from_s3(bucket: str, prefix: str = ""):
     """Charge automatiquement le fichier le plus récent (csv/xls/xlsx) depuis S3"""
