@@ -1479,7 +1479,15 @@ class DashboardApp:
                 ["xlsx", "csv"],
                 description="Colonnes attendues: Date de souscription, Montant, Conseiller, Produit, Statut/Étape"
             )
-            
+
+
+# =============================================================================
+
+            if df_epargne is None:
+                df_epargne = auto_load_from_s3("epargne", description="souscriptions épargne")
+# =============================================================================
+
+
             if df_epargne is not None:
                 st.markdown("---")
                 
@@ -1553,7 +1561,16 @@ class DashboardApp:
                 ["xlsx", "csv"],
                 description="Colonnes attendues: Date de création, Conseiller, Statut, Montant, Type de bien"
             )
-            
+
+# =============================================================================
+
+            if df_immo is None:
+                df_immo = auto_load_from_s3("immo", description="souscriptions immobilières")
+# =============================================================================
+
+
+
+
             if df_immo is not None:
                 st.markdown("---")
                 
