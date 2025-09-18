@@ -1562,14 +1562,18 @@ class DashboardApp:
                     ["xlsx", "csv"],
                     description="Colonnes attendues: Date de création, Conseiller, Statut, Montant, Type de bien"
                 )
-
-# =============================================================================
-
-            if df_immo is None:
-                df_immo = auto_load_from_s3("immo", description="souscriptions immobilières")
-# =============================================================================
-
-
+            
+                if df_immo is None:
+                    df_immo = auto_load_from_s3("immo", description="souscriptions immobilières")
+                
+                # AJOUTER CETTE LIGNE
+                self.data_files['df_immo'] = df_immo
+                
+                if df_immo is not None:
+                    st.markdown("---")
+                    # ... reste du code d'analyse ...
+                
+                self.render_debug_info("Immobilier")
 
 
             if df_immo is not None:
