@@ -830,8 +830,8 @@ class DashboardApp:
             self.logger.info(f"Fichier chargé: {source} - {len(df)} lignes")
             return df
 
-    st.error(f"❌ Aucun fichier chargé pour {label}")
-    return None
+        st.error(f"❌ Aucun fichier chargé pour {label}")
+        return None
 
     
     def process_entretiens_file(self, df, type_entretien):
