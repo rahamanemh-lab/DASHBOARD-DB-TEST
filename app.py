@@ -18,297 +18,100 @@ import json
 import requests
 from typing import Optional, Dict, Any
 
+
 # =============================================================================
-# SECTION CRYPTO - TEST CONNEXION LIGHTSAIL
+# S3 CONFIG
 # =============================================================================
-import pymysql
-import json
+
+
 import boto3
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from io import BytesIO
+from urllib.parse import urlparse
 
-def test_crypto_lightsail_connection():
-    """Test de connexion à la base LightSail pour les données crypto"""
-    try:
-        # Utiliser st.secrets pour Streamlit Cloud
-        conn = pymysql.connect(
-            host=st.secrets["database"]["host"],
-            user=st.secrets["database"]["user"],
-            password=st.secrets["database"]["password"],
-            database=st.secrets["database"]["dbname"],
-            port=3306,
-            charset='utf8mb4',
-            connect_timeout=10
-        )
-        return conn, "Streamlit Secrets"
-    except Exception as e:
-        return None, str(e)
+@st.cache_data(ttl=300, show_spinner=False)
+def _get_s3_client():
+    # lit d’abord dans st.secrets, sinon variables d’env
+    region = (st.secrets.get("s3", {}) or {}).get("region") or os.getenv("AWS_DEFAULT_REGION", "eu-north-1")
+    aws_id = (st.secrets.get("s3", {}) or {}).get("aws_access_key_id") or os.getenv("AWS_ACCESS_KEY_ID")
+    aws_sk = (st.secrets.get("s3", {}) or {}).get("aws_secret_access_key") or os.getenv("AWS_SECRET_ACCESS_KEY")
+    params = {"region_name": region}
+    if aws_id and aws_sk:
+        params.update({"aws_access_key_id": aws_id, "aws_secret_access_key": aws_sk})
+    return boto3.client("s3", **params)
 
-def render_crypto_test_section():
-    """Section crypto complète avec graphiques dans le dashboard"""
-    st.markdown("---")
-    st.subheader("🔍 Dashboard Crypto LightSail")
-    
-    # Test de connexion
-    conn, source = test_crypto_lightsail_connection()
-    
-    if conn:
-        st.success(f"✅ Connexion réussie ! Source : {source}")
-        
+def _s3_conf():
+    # récupère bucket + mapping des préfixes
+    s3sec = st.secrets.get("s3", {}) or {}
+    return {
+        "bucket": s3sec.get("bucket") or os.getenv("S3_BUCKET"),
+        "region": s3sec.get("region") or os.getenv("AWS_DEFAULT_REGION", "eu-north-1"),
+        "prefixes": {
+            "epargne": s3sec.get("epargne_prefix") or os.getenv("S3_EPARGNE_PREFIX", "inputs/epargne/"),
+            "immo": s3sec.get("immo_prefix") or os.getenv("S3_IMMO_PREFIX", "inputs/immo/"),
+            "rdv": s3sec.get("rdv_prefix") or os.getenv("S3_RDV_PREFIX", "inputs/rdv/"),
+            "clients": s3sec.get("clients_prefix") or os.getenv("S3_CLIENTS_PREFIX", "inputs/clients/"),
+            "entretiens_epargne": s3sec.get("entretiens_epargne_prefix") or os.getenv("S3_ENT_EP_PREFIX", "inputs/entretiens_epargne/"),
+            "entretiens_immo": s3sec.get("entretiens_immo_prefix") or os.getenv("S3_ENT_IMMO_PREFIX", "inputs/entretiens_immo/"),
+            "paiements_epargne": s3sec.get("paiements_epargne_prefix") or os.getenv("S3_PAY_EP_PREFIX", "inputs/paiements_epargne/"),
+            "paiements_immo": s3sec.get("paiements_immo_prefix") or os.getenv("S3_PAY_IMMO_PREFIX", "inputs/paiements_immo/"),
+            "analyse_2025": s3sec.get("analyse_2025_prefix") or os.getenv("S3_2025_PREFIX", "inputs/analyse_2025/"),
+        },
+        "extensions": (s3sec.get("extensions") or "xlsx,csv").split(",")
+    }
+
+@st.cache_data(ttl=120, show_spinner=False)
+def s3_latest_key(bucket: str, prefix: str, allowed_ext=("xlsx","xls","csv")) -> str | None:
+    s3 = _get_s3_client()
+    paginator = s3.get_paginator("list_objects_v2")
+    latest = None
+    latest_ts = None
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if any(key.lower().endswith("."+ext.lower()) for ext in allowed_ext):
+                ts = obj["LastModified"]
+                if latest_ts is None or ts > latest_ts:
+                    latest, latest_ts = key, ts
+    return latest
+
+@st.cache_data(ttl=120, show_spinner=False)
+def s3_read_excel_or_csv(bucket: str, key: str) -> pd.DataFrame | None:
+    s3 = _get_s3_client()
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    data = obj["Body"].read()
+    if key.lower().endswith((".xlsx",".xls")):
+        return pd.read_excel(BytesIO(data))
+    elif key.lower().endswith(".csv"):
+        # essai auto d’encodage ; ajuste si besoin
         try:
-            cursor = conn.cursor()
-            
-            # Informations de base
-            cursor.execute("SELECT NOW() as current_time, VERSION() as version")
-            result = cursor.fetchone()
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.info(f"🕐 Heure DB : {result[0]}")
-            with col2:
-                st.info(f"📋 Version : {result[1]}")
-            
-            # Lister les tables
-            cursor.execute("SHOW TABLES")
-            tables = cursor.fetchall()
-            
-            if tables:
-                table_names = [table[0] for table in tables]
-                
-                # Chercher une table crypto
-                crypto_tables = [t for t in table_names if 'crypto' in t.lower()]
-                if crypto_tables:
-                    crypto_table = crypto_tables[0]
-                    st.success(f"🪙 Table crypto trouvée : `{crypto_table}`")
-                    
-                    # Compter les lignes
-                    cursor.execute(f"SELECT COUNT(*) FROM {crypto_table}")
-                    count = cursor.fetchone()[0]
-                    
-                    if count > 0:
-                        # Métriques principales
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("📊 Total lignes", f"{count:,}")
-                        
-                        # Récupérer les assets uniques
-                        cursor.execute(f"SELECT DISTINCT asset FROM {crypto_table}")
-                        assets = [row[0] for row in cursor.fetchall()]
-                        with col2:
-                            st.metric("🪙 Assets uniques", len(assets))
-                        
-                        # Dernière mise à jour
-                        cursor.execute(f"SELECT MAX(timestamp) FROM {crypto_table}")
-                        last_update = cursor.fetchone()[0]
-                        with col3:
-                            if last_update:
-                                st.metric("🕐 Dernière MAJ", last_update.strftime("%H:%M:%S"))
-                        
-                        # Sélecteur de période
-                        st.subheader("📈 Visualisations Crypto")
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            period = st.selectbox(
-                                "Période d'analyse",
-                                ["Dernière heure", "Dernières 24h", "Dernière semaine", "Tout"],
-                                index=1
-                            )
-                        
-                        with col2:
-                            selected_assets = st.multiselect(
-                                "Sélectionner les assets",
-                                assets,
-                                default=assets[:3] if len(assets) >= 3 else assets
-                            )
-                        
-                        if selected_assets:
-                            # Construire la requête selon la période
-                            where_clause = ""
-                            if period == "Dernière heure":
-                                where_clause = "AND timestamp >= DATE_SUB(NOW(), INTERVAL 1 HOUR)"
-                            elif period == "Dernières 24h":
-                                where_clause = "AND timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)"
-                            elif period == "Dernière semaine":
-                                where_clause = "AND timestamp >= DATE_SUB(NOW(), INTERVAL 1 WEEK)"
-                            
-                            # Préparer la clause IN pour les assets
-                            assets_placeholder = ','.join(['%s'] * len(selected_assets))
-                            
-                            # Requête pour les données du graphique
-                            query = f"""
-                            SELECT timestamp, asset, CAST(price AS DECIMAL(15,6)) as price
-                            FROM {crypto_table}
-                            WHERE asset IN ({assets_placeholder}) {where_clause}
-                            ORDER BY timestamp DESC
-                            LIMIT 1000
-                            """
-                            
-                            cursor.execute(query, selected_assets)
-                            chart_data = cursor.fetchall()
-                            
-                            if chart_data:
-                                # Créer le DataFrame
-                                df_chart = pd.DataFrame(chart_data, columns=['timestamp', 'asset', 'price'])
-                                df_chart['timestamp'] = pd.to_datetime(df_chart['timestamp'])
-                                df_chart['price'] = pd.to_numeric(df_chart['price'])
-                                
-                                # Graphique principal - Evolution temporelle
-                                fig_line = px.line(
-                                    df_chart.sort_values('timestamp'),
-                                    x='timestamp',
-                                    y='price',
-                                    color='asset',
-                                    title=f"Evolution des prix crypto - {period}",
-                                    labels={'price': 'Prix (USD)', 'timestamp': 'Temps'}
-                                )
-                                fig_line.update_layout(height=500)
-                                st.plotly_chart(fig_line, use_container_width=True)
-                                
-                                # Graphiques en colonnes
-                                col1, col2 = st.columns(2)
-                                
-                                with col1:
-                                    # Prix actuels
-                                    latest_prices = df_chart.groupby('asset')['price'].last().reset_index()
-                                    fig_bar = px.bar(
-                                        latest_prices,
-                                        x='asset',
-                                        y='price',
-                                        title="Prix actuels par Asset",
-                                        labels={'price': 'Prix (USD)', 'asset': 'Asset'}
-                                    )
-                                    st.plotly_chart(fig_bar, use_container_width=True)
-                                
-                                with col2:
-                                    # Distribution des prix
-                                    fig_box = px.box(
-                                        df_chart,
-                                        x='asset',
-                                        y='price',
-                                        title="Distribution des prix",
-                                        labels={'price': 'Prix (USD)', 'asset': 'Asset'}
-                                    )
-                                    st.plotly_chart(fig_box, use_container_width=True)
-                                
-                                # Statistiques détaillées
-                                st.subheader("📊 Statistiques détaillées")
-                                stats = df_chart.groupby('asset')['price'].agg([
-                                    'count', 'mean', 'min', 'max', 'std'
-                                ]).round(4)
-                                stats.columns = ['Nb points', 'Prix moyen', 'Prix min', 'Prix max', 'Écart-type']
-                                
-                                # Ajouter évolution (%)
-                                evolution = df_chart.groupby('asset').apply(
-                                    lambda x: ((x['price'].iloc[-1] - x['price'].iloc[0]) / x['price'].iloc[0] * 100) 
-                                    if len(x) > 1 else 0
-                                ).round(2)
-                                stats['Evolution (%)'] = evolution
-                                
-                                st.dataframe(stats, use_container_width=True)
-                                
-                                # Dernières données
-                                st.subheader("📋 Dernières données")
-                                recent_data = df_chart.sort_values('timestamp', ascending=False).head(10)
-                                recent_data['timestamp'] = recent_data['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                                st.dataframe(recent_data, use_container_width=True)
-                                
-                            else:
-                                st.warning("⚠️ Aucune donnée trouvée pour la période sélectionnée")
-                        
-                        else:
-                            st.info("Sélectionnez au moins un asset pour voir les graphiques")
-                    
-                    else:
-                        st.warning("⚠️ Table crypto vide")
-                
-                else:
-                    st.warning("⚠️ Aucune table crypto trouvée")
-                    st.write(f"**Tables disponibles :** {', '.join(table_names)}")
-            
-            else:
-                st.warning("⚠️ Aucune table trouvée dans la base")
-            
-            cursor.close()
-            conn.close()
-            
-        except Exception as e:
-            st.error(f"❌ Erreur lors des requêtes : {str(e)}")
-    
-    else:
-        st.error(f"❌ Connexion échouée : {source}")
-        st.warning("⚠️ Vérifiez la configuration des secrets de base de données dans Streamlit Cloud")
-        
-        # Instructions de configuration
-        with st.expander("🔧 Configuration des secrets", expanded=True):
-            st.code("""
-# Dans Streamlit Cloud > Secrets:
-[database]
-host = "votre-endpoint-lightsail.region.rds.amazonaws.com"
-user = "admin"
-password = "votre-mot-de-passe"
-dbname = "crypto_datalake"
-            """)
-    
-    # Section upload test CSV/Excel crypto (inchangée)
-    st.markdown("---")
-    st.subheader("📄 Test Upload CSV/Excel Crypto")
-    
-    uploaded_crypto_file = st.file_uploader(
-        "Uploader un fichier crypto pour test",
-        type=['csv', 'xlsx', 'xls'],
-        key="crypto_test_upload",
-        help="Testez l'upload avec vos données crypto exportées depuis S3"
-    )
-    
-    if uploaded_crypto_file:
-        try:
-            # Lire le fichier selon son type
-            if uploaded_crypto_file.name.endswith('.csv'):
-                df_crypto = pd.read_csv(uploaded_crypto_file)
-            else:
-                df_crypto = pd.read_excel(uploaded_crypto_file)
-            
-            st.success(f"✅ Fichier crypto lu : {len(df_crypto)} lignes, {len(df_crypto.columns)} colonnes")
-            
-            # Aperçu des données
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**📋 Colonnes détectées :**")
-                for col in df_crypto.columns:
-                    st.write(f"• {col}")
-            
-            with col2:
-                st.write("**📊 Aperçu des données :**")
-                st.dataframe(df_crypto.head(), use_container_width=True)
-            
-            # Graphique du fichier uploadé si les colonnes appropriées existent
-            if all(col in df_crypto.columns for col in ['timestamp', 'asset', 'price']):
-                st.subheader("📈 Visualisation du fichier uploadé")
-                df_crypto['timestamp'] = pd.to_datetime(df_crypto['timestamp'], errors='coerce')
-                df_crypto['price'] = pd.to_numeric(df_crypto['price'], errors='coerce')
-                
-                df_clean = df_crypto.dropna(subset=['timestamp', 'price'])
-                if not df_clean.empty:
-                    fig_upload = px.line(
-                        df_clean,
-                        x='timestamp',
-                        y='price',
-                        color='asset' if 'asset' in df_clean.columns else None,
-                        title="Données crypto du fichier uploadé"
-                    )
-                    st.plotly_chart(fig_upload, use_container_width=True)
-            
-        except Exception as e:
-            st.error(f"❌ Erreur lecture fichier : {str(e)}")
-    
-    st.markdown("---")
+            return pd.read_csv(BytesIO(data))
+        except Exception:
+            return pd.read_csv(BytesIO(data), encoding="utf-8", sep=";")
+    return None
 
-#=============================================================================
+def auto_load_from_s3(kind: str, description: str = "") -> pd.DataFrame | None:
+    cfg = _s3_conf()
+    bucket = cfg["bucket"]
+    if not bucket:
+        st.warning("S3 non configuré (bucket manquant).")
+        return None
+    prefix = cfg["prefixes"].get(kind)
+    if not prefix:
+        st.warning(f"Préfixe S3 manquant pour {kind}.")
+        return None
+    key = s3_latest_key(bucket, prefix, cfg["extensions"])
+    if not key:
+        st.info(f"Aucun fichier trouvé sur S3 sous `{prefix}` pour {kind}.")
+        return None
+    with st.spinner(f"📥 Chargement S3 ({description or kind})…"):
+        df = s3_read_excel_or_csv(bucket, key)
+    if df is not None:
+        st.success(f"✅ Chargé depuis S3: s3://{bucket}/{key}")
+    return df
 
-
+# =============================================================================
+# FIN S3 CONFIG
+# =============================================================================
 
 
 # ⚠️ CECI DOIT ÊTRE LA PREMIÈRE COMMANDE STREAMLIT
