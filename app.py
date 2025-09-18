@@ -23,14 +23,17 @@ from typing import Optional, Dict, Any
 import boto3
 import io
 
-def make_s3_client():
+def make_s3_client(region: str = None):
     aws_conf = st.secrets.get("aws", {})
-    return boto3.client(
-        "s3",
-        region_name=aws_conf.get("region_name", "eu-north-1"),
-        aws_access_key_id=aws_conf.get("aws_access_key_id"),
-        aws_secret_access_key=aws_conf.get("aws_secret_access_key"),
-    )
+    if {"aws_access_key_id", "aws_secret_access_key"} <= set(aws_conf.keys()):
+        return boto3.client(
+            "s3",
+            region_name=region or aws_conf.get("region_name"),
+            aws_access_key_id=aws_conf["aws_access_key_id"],
+            aws_secret_access_key=aws_conf["aws_secret_access_key"]
+        )
+    return boto3.client("s3", region_name=region or aws_conf.get("region_name"))
+
 
 def find_latest_file(s3, bucket: str, prefix: str):
     """Retourne (key, last_modified) du fichier le plus récent sous Prefix."""
